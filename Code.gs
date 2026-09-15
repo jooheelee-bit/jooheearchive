@@ -443,14 +443,14 @@ function gsRefreshKbPrice(complexId) {
 /* ---------- 일회성 유틸리티 (Apps Script 편집기에서 직접 실행) ---------- */
 
 /**
- * KB시세 오매칭 문제를 진단하기 위한 함수입니다.
- * 한양수자인성남마크뷰 페이지에서 'KB시세 일반가' 라벨이 몇 번 등장하는지,
- * 각 위치 주변에 어떤 텍스트(평형 정보 등)가 있는지를 실행 로그에 출력합니다.
+ * KB시세 오매칭 문제를 진단하기 위한 함수입니다(2차: 평형/거래유형 원인 좁히기).
+ * 1) 페이지에 구조화된 데이터(JSON)가 통째로 심어져 있는지 확인하고
+ * 2) '56.66', '102.2', '매매', '전세' 같은 키워드가 어디에 몇 번 등장하는지,
+ * 3) 'KB시세 일반가' 라벨 각각의 앞쪽 문맥(최대 2000자)에 그 키워드들이
+ *    포함돼 있는지를 실행 로그에 출력합니다.
  *
  * 사용법: Apps Script 편집기 상단 함수 선택을 "debugKbPriceBlocks"로 바꾸고
- * ▶ 실행 → 왼쪽 "실행 로그" 또는 보기 > 실행 기록에서 출력된 내용을 복사해
- * 공유해주세요. (라벨이 여러 번 나오는지, areaMatch 문자열 '56.66'이 어느
- * 블록 근처에 있는지를 확인하기 위함입니다.)
+ * ▶ 실행 → 실행 로그 전체를 복사해 공유해주세요.
  */
 function debugKbPriceBlocks() {
   var complex = complexById_('hanyangmarkview');
@@ -464,24 +464,38 @@ function debugKbPriceBlocks() {
   var html = res.getContentText();
   Logger.log('HTML 길이: ' + html.length);
 
+  Logger.log('----- 구조화 데이터(JSON) 마커 위치 -----');
+  ['__NEXT_DATA__', '__INITIAL_STATE__', '__PRELOADED_STATE__', 'application/ld+json', 'application/json'].forEach(function (marker) {
+    Logger.log('"' + marker + '" 위치: ' + html.indexOf(marker));
+  });
+
+  Logger.log('----- 평형/거래유형 키워드 위치 -----');
+  ['56.66', '102.2', '40.95', '84.89', '매매', '전세', '월세'].forEach(function (needle) {
+    var positions = [];
+    var i = 0;
+    while (positions.length < 6) {
+      var found = html.indexOf(needle, i);
+      if (found === -1) break;
+      positions.push(found);
+      i = found + needle.length;
+    }
+    Logger.log('"' + needle + '" 위치: ' + JSON.stringify(positions));
+  });
+
   var label = 'KB시세 일반가';
   var idx = 0, count = 0;
-  while (count < 8) {
+  while (count < 5) {
     idx = html.indexOf('>' + label + '<', idx);
     if (idx === -1) break;
     count++;
-    var windowStart = Math.max(0, idx - 500);
-    var beforeText = htmlToPlainText_(html.slice(windowStart, idx));
-    var afterText = htmlToPlainText_(html.slice(idx, idx + 1000));
-    Logger.log('===== 매치 #' + count + ' (offset ' + idx + ') =====');
-    Logger.log('--- 앞쪽 문맥(최대 500자, 평형 정보 확인용) ---');
-    Logger.log(beforeText);
-    Logger.log('--- 라벨 이후 값(최대 1000자) ---');
-    Logger.log(afterText);
+    var wideStart = Math.max(0, idx - 6000);
+    var beforeWide = htmlToPlainText_(html.slice(wideStart, idx));
+    Logger.log('===== 매치 #' + count + ' (offset ' + idx + ') 앞쪽 문맥(라벨 바로 앞 2000자) =====');
+    Logger.log(beforeWide.slice(-2000));
     idx += label.length;
   }
   if (count === 0) {
-    Logger.log('라벨을 하나도 찾지 못했어요. 페이지 구조가 완전히 바뀌었을 수 있어요.');
+    Logger.log('라벨을 하나도 찾지 못했어요.');
   } else {
     Logger.log('총 ' + count + '개 매치 발견');
   }
