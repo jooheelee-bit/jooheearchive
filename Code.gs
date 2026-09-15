@@ -242,7 +242,7 @@ function gsAddListingsBulk(complexId, entries) {
       priceRaw: entry.priceRaw, priceMin: entry.priceMin, priceMax: entry.priceMax,
       latestPriceRaw: '', latestPriceMin: null, latestPriceMax: null,
       confirmedDate: entry.confirmedDate || '', brokerCount: entry.brokerCount,
-      tags: [], highlightedTags: [], link: '', memo: '', status: 'new',
+      tags: entry.tags || [], highlightedTags: [], link: '', memo: '', status: 'new',
       createdAt: now, updatedAt: now
     };
     sh.appendRow(objectToRow_(obj));
@@ -263,11 +263,11 @@ function gsUpdateListing(complexId, id, patch) {
   return { ok: true, item: obj };
 }
 
-/* ---------- 네이버 부동산 링크로 매물 정보 가져오기 ---------- */
+/* ---------- KB시세 ---------- */
 
 /**
- * HTML을 사람이 페이지를 보고 복사-붙여넣기 했을 때와 비슷한 일반 텍스트로 변환합니다.
- * (붙여넣기 탭에서 쓰는 것과 같은 방식으로 파싱하기 위한 전처리)
+ * HTML을 사람이 페이지를 보고 복사한 것과 비슷한 일반 텍스트로 변환합니다.
+ * (debugKbPriceBlocks에서 문맥을 읽기 쉽게 출력하기 위한 용도)
  */
 function htmlToPlainText_(html) {
   var noScripts = html
@@ -289,89 +289,6 @@ function htmlToPlainText_(html) {
     .filter(Boolean);
   return lines.join('\n');
 }
-
-function extractDongFromText_(text) {
-  var m = text.match(/(\d{1,4}동)(?!\d)/);
-  return m ? m[1] : '';
-}
-
-function extractFloorTextFromText_(text) {
-  var m = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})\s*층/);
-  if (m) return m[1] + '/' + m[2] + '층';
-  m = text.match(/(\d{1,3})\s*층\s*\/\s*(\d{1,3})\s*층/);
-  if (m) return m[1] + '/' + m[2] + '층';
-  m = text.match(/(고)\s*\/\s*(\d{1,3})\s*층/);
-  if (m) return m[1] + '/' + m[2] + '층';
-  return '';
-}
-
-function extractDirectionFromText_(text) {
-  var m = text.match(/(남동향|남서향|북동향|북서향|남향|북향|동향|서향)/);
-  return m ? m[1] : '';
-}
-
-function extractPriceRawFromText_(text) {
-  var m = text.match(/매매\s*([\d][\d,.\s~억만]*)/);
-  if (!m) return '';
-  return m[1].trim().replace(/\s+/g, ' ').replace(/[~,.\s]+$/, '');
-}
-
-function extractConfirmedDateFromText_(text) {
-  var m = text.match(/확인[^\d\n]{0,8}(\d{4}[.\-]\d{1,2}[.\-]\d{1,2})/);
-  if (!m) m = text.match(/(\d{4}[.\-]\d{1,2}[.\-]\d{1,2})[^\d\n]{0,4}확인/);
-  return m ? normalizeKbDate_(m[1]) : '';
-}
-
-function extractMemoFromText_(text) {
-  var m = text.match(/(?:특징|매물\s*특징|중개사\s*코멘트|상세\s*설명)[:\s]*([^\n]{5,80})/);
-  return m ? m[1].trim() : '';
-}
-
-/**
- * 네이버 부동산(naver.me 단축링크, land.naver.com 등) 매물 상세 링크에서
- * 동/층/방향/가격/확인일자/메모를 최대한 자동으로 추출합니다.
- * 사이트 화면 구성이 자주 바뀌기 때문에 항목이 비어 있을 수 있고,
- * 그런 경우 "직접 입력" 탭에서 나머지를 채워 넣어야 합니다.
- */
-function gsFetchListingFromLink(rawUrl) {
-  var url = (rawUrl || '').trim();
-  if (!url) throw new Error('링크를 입력해주세요.');
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  if (!/naver\.(me|com)/i.test(url)) {
-    throw new Error('네이버 부동산(naver.me, land.naver.com) 링크만 지원해요.');
-  }
-
-  var res = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true,
-    followRedirects: true,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
-    }
-  });
-  var code = res.getResponseCode();
-  if (code !== 200) {
-    throw new Error('링크 페이지 응답 오류 (코드 ' + code + ')');
-  }
-  var text = htmlToPlainText_(res.getContentText());
-
-  var entry = {
-    dong: extractDongFromText_(text),
-    floorText: extractFloorTextFromText_(text),
-    direction: extractDirectionFromText_(text),
-    priceRaw: extractPriceRawFromText_(text),
-    confirmedDate: extractConfirmedDateFromText_(text),
-    memo: extractMemoFromText_(text),
-    link: url
-  };
-
-  var foundAny = entry.dong || entry.priceRaw || entry.floorText || entry.direction || entry.confirmedDate;
-  if (!foundAny) {
-    throw new Error('페이지에서 매물 정보를 인식하지 못했어요. 링크를 다시 확인하거나 직접 입력해 주세요.');
-  }
-  return entry;
-}
-
-/* ---------- KB시세 ---------- */
 
 /**
  * 라벨(예: 'KB시세 일반가') 바로 뒤에 오는 두 개의 span 값을 읽어옵니다.
