@@ -331,6 +331,7 @@
     <h2>매물 추가</h2>
     <div class="tabs" role="tablist">
       <button class="tab-btn" data-tab="paste" aria-selected="true">붙여넣기로 추가</button>
+      <button class="tab-btn" data-tab="link" aria-selected="false">링크로 추가</button>
       <button class="tab-btn" data-tab="manual" aria-selected="false">직접 입력</button>
     </div>
 
@@ -347,6 +348,15 @@
       <textarea id="pasteInput" placeholder="여기에 네이버 부동산 매물 목록을 붙여넣으세요"></textarea>
       <div style="margin-top:12px;"><button class="btn-primary" id="parseBtn">붙여넣은 매물 반영하기</button></div>
       <div class="result-msg" id="pasteResult"></div>
+    </div>
+
+    <div class="panel" data-panel="link">
+      <p class="hint">네이버 부동산 매물 상세 링크(naver.me 단축링크 포함)를 붙여넣으면 동·층·가격·방향·확인일자·메모를 최대한 자동으로 채워드려요. 사이트 화면 구성에 따라 일부 항목은 비어 있을 수 있으니, 정보를 가져온 뒤 <b>직접 입력</b> 탭에서 내용을 확인하고 저장해 주세요.</p>
+      <div class="tag-input-row">
+        <input type="text" id="linkInput" placeholder="예: https://naver.me/xxxxxxx">
+        <button type="button" class="btn-primary" id="linkFetchBtn" style="flex:none;">불러오기</button>
+      </div>
+      <div class="result-msg" id="linkResult"></div>
     </div>
 
     <div class="panel" data-panel="manual">
@@ -392,6 +402,10 @@
               <button type="button" class="icon-btn" id="f_tag_add">추가</button>
             </div>
             <div class="tag-list" id="f_tag_list"></div>
+          </div>
+          <div class="full">
+            <label for="f_memo">메모</label>
+            <input type="text" id="f_memo" placeholder="메모 (선택 사항)">
           </div>
           <div class="full">
             <label for="f_link">링크</label>
@@ -560,7 +574,7 @@
       latestPriceRaw: entry.latestPriceRaw || '', latestPriceMin: latestPriced.min, latestPriceMax: latestPriced.max,
       floorText: entry.floorText || '', direction: entry.direction || '',
       confirmedDate: entry.confirmedDate || '', brokerCount: (entry.brokerCount != null ? entry.brokerCount : null),
-      tags: entry.tags || [], link: entry.link || ''
+      tags: entry.tags || [], memo: entry.memo || '', link: entry.link || ''
     });
     return !!(res && res.added);
   }
@@ -588,12 +602,14 @@
     });
   });
 
+  function activateTab(tabName){
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.setAttribute('aria-selected', b.dataset.tab === tabName ? 'true' : 'false'); });
+    document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.panel === tabName); });
+  }
+
   document.querySelectorAll('.tab-btn').forEach(function(btn){
     btn.addEventListener('click', function(){
-      document.querySelectorAll('.tab-btn').forEach(function(b){ b.setAttribute('aria-selected','false'); });
-      document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
-      btn.setAttribute('aria-selected','true');
-      document.querySelector('.panel[data-panel="'+btn.dataset.tab+'"]').classList.add('active');
+      activateTab(btn.dataset.tab);
     });
   });
 
@@ -694,6 +710,30 @@
     btn.disabled = false;
   });
 
+  document.getElementById('linkFetchBtn').addEventListener('click', async function(){
+    var url = document.getElementById('linkInput').value.trim();
+    var resultEl = document.getElementById('linkResult');
+    if (!url){ showResult(resultEl, '링크를 입력해주세요.', 'info'); return; }
+    var btn = this; btn.disabled = true;
+    try {
+      var entry = await gsCall('gsFetchListingFromLink', url);
+      document.getElementById('f_dong').value = entry.dong || '';
+      document.getElementById('f_price').value = entry.priceRaw || '';
+      document.getElementById('f_floor').value = entry.floorText || '';
+      document.getElementById('f_direction').value = entry.direction || '';
+      document.getElementById('f_date').value = (entry.confirmedDate || '').replace(/\./g, '-');
+      document.getElementById('f_memo').value = entry.memo || '';
+      document.getElementById('f_link').value = entry.link || url;
+      document.getElementById('linkInput').value = '';
+      resultEl.classList.remove('show');
+      activateTab('manual');
+      showResult(document.getElementById('manualResult'), '링크에서 정보를 가져왔어요. 빠진 항목이 있으면 채운 뒤 저장해 주세요.', 'info');
+    } catch (err){
+      showResult(resultEl, '정보를 가져오지 못했어요: ' + (err && err.message ? err.message : err), 'info');
+    }
+    btn.disabled = false;
+  });
+
   document.getElementById('manualForm').addEventListener('submit', async function(e){
     e.preventDefault();
     var resultEl = document.getElementById('manualResult');
@@ -707,6 +747,7 @@
       confirmedDate: normalizeDate(document.getElementById('f_date').value),
       brokerCount: document.getElementById('f_broker').value ? parseInt(document.getElementById('f_broker').value,10) : null,
       tags: pendingTags.slice(),
+      memo: document.getElementById('f_memo').value.trim(),
       link: document.getElementById('f_link').value.trim()
     };
     if (!entry.dong || !entry.priceRaw){ showResult(resultEl, '동과 가격은 필수 입력이에요.', 'info'); return; }
