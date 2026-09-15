@@ -44,7 +44,7 @@ var COLUMNS = [
 var COMPLEXES = [
   { id: 'gurodusan', name: '구로두산', areaSqm: 66, kbUrl: 'https://kbland.kr/se/c/766' },
   { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaSqm: 56.66, kbUrl: 'https://kbland.kr/se/c/42671', kbComplexNo: 42671, kbAreaNo: 41439 },
-  { id: 'byeoksanlivepark', name: '벽산라이브파크', areaSqm: 74, kbUrl: '' }
+  { id: 'byeoksanlivepark', name: '벽산라이브파크', areaSqm: 74.79, kbUrl: 'https://kbland.kr/se/c/422', kbComplexNo: 422, kbAreaNo: 93651 }
 ];
 var DEFAULT_COMPLEX_ID = COMPLEXES[0].id;
 var COMPLEXES_SHEET_NAME = 'Complexes';
