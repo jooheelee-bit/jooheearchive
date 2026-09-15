@@ -139,19 +139,16 @@
   .dist-footer b{ font-size:15px; font-family:'IBM Plex Sans KR',sans-serif; }
 
   /* sort tabs */
-  .sort-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
-  .sort-btns{ display:flex; gap:6px; flex:none; }
+  .sort-row{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; }
+  .sort-btns{ display:flex; flex-wrap:wrap; gap:6px; }
   .sort-btn{
     font:inherit; font-size:13px; font-weight:600; padding:7px 13px; border-radius:999px; border:1px solid var(--border);
     background:var(--surface); color:var(--text-muted); cursor:pointer; white-space:nowrap; flex:none;
   }
   .sort-btn[aria-pressed="true"]{ background:var(--chip); color:var(--chip-text); border-color:var(--chip); }
 
-  .list-filters{ display:flex; gap:6px; flex:none; }
-  .filter-select{
-    font:inherit; font-size:12px; font-weight:600; padding:7px 10px; border-radius:999px; border:1px solid var(--border);
-    background:var(--surface); color:var(--text-muted); cursor:pointer; flex:none;
-  }
+  .list-filters{ display:flex; gap:6px; flex:none; margin-left:auto; }
+  .dropdown-filter{ position:relative; flex:none; }
 
   /* list */
   .list-filter-bar{
@@ -272,7 +269,6 @@
   @media (max-width:480px){
     .header h1{ font-size:21px; }
     .complex-switch-btn{ font-size:11px; padding:7px 10px; }
-    .sort-row{ flex-wrap:wrap; overflow-x:visible; }
     .stats{ grid-template-columns:repeat(2,1fr); }
     .kb-price-grid{ grid-template-columns:1fr; }
     .form-grid{ grid-template-columns:1fr; }
@@ -334,8 +330,18 @@
       <button class="sort-btn" data-sort="confirmedAsc">과거순</button>
     </div>
     <div class="list-filters">
-      <select id="dongFilterSelect" class="filter-select" aria-label="동 필터"><option value="">전체 동</option></select>
-      <select id="floorFilterSelect" class="filter-select" aria-label="층 필터"><option value="">전체 층</option></select>
+      <div class="dropdown-filter">
+        <button type="button" id="dongFilterBtn" class="complex-switch-btn" aria-haspopup="true" aria-expanded="false">
+          <span id="dongFilterLabel">전체 동</span> <span class="chevron">▾</span>
+        </button>
+        <div class="complex-menu" id="dongFilterMenu" hidden></div>
+      </div>
+      <div class="dropdown-filter">
+        <button type="button" id="floorFilterBtn" class="complex-switch-btn" aria-haspopup="true" aria-expanded="false">
+          <span id="floorFilterLabel">전체 층</span> <span class="chevron">▾</span>
+        </button>
+        <div class="complex-menu" id="floorFilterMenu" hidden></div>
+      </div>
     </div>
   </div>
 
@@ -658,12 +664,37 @@
     });
   });
 
-  document.getElementById('dongFilterSelect').addEventListener('change', function(){
-    state.dongFilter = this.value;
+  function setDropdownOpen(btn, menu, open){
+    menu.hidden = !open;
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  document.getElementById('dongFilterBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    var menu = document.getElementById('dongFilterMenu');
+    setDropdownOpen(document.getElementById('floorFilterBtn'), document.getElementById('floorFilterMenu'), false);
+    setDropdownOpen(this, menu, menu.hidden);
+  });
+  document.getElementById('floorFilterBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    var menu = document.getElementById('floorFilterMenu');
+    setDropdownOpen(document.getElementById('dongFilterBtn'), document.getElementById('dongFilterMenu'), false);
+    setDropdownOpen(this, menu, menu.hidden);
+  });
+
+  document.getElementById('dongFilterMenu').addEventListener('click', function(e){
+    var item = e.target.closest('.complex-menu-item');
+    if (!item) return;
+    setDropdownOpen(document.getElementById('dongFilterBtn'), this, false);
+    state.dongFilter = item.dataset.value;
     render();
   });
-  document.getElementById('floorFilterSelect').addEventListener('change', function(){
-    state.floorFilter = this.value;
+  document.getElementById('floorFilterMenu').addEventListener('click', function(e){
+    var item = e.target.closest('.complex-menu-item');
+    if (!item) return;
+    setDropdownOpen(document.getElementById('floorFilterBtn'), this, false);
+    state.floorFilter = item.dataset.value;
     render();
   });
 
@@ -989,20 +1020,23 @@
     return out;
   }
 
-  function populateFilterSelects(allItems){
-    var dongSel = document.getElementById('dongFilterSelect');
-    var floorSel = document.getElementById('floorFilterSelect');
-
+  function populateFilterMenus(allItems){
     var dongs = distinctSorted(allItems.map(function(it){ return it.dong; }), compareDong);
     var floors = distinctSorted(allItems.map(function(it){ return floorTokenOf(it.floorText); }), compareFloorTokens);
 
-    dongSel.innerHTML = '<option value="">전체 동</option>' + dongs.map(function(d){
-      return '<option value="' + escapeHtml(d) + '"' + (d === state.dongFilter ? ' selected' : '') + '>' + escapeHtml(d) + '</option>';
-    }).join('');
+    var dongMenu = document.getElementById('dongFilterMenu');
+    dongMenu.innerHTML = '<button type="button" class="complex-menu-item' + (!state.dongFilter ? ' active' : '') + '" data-value="">전체 동</button>' +
+      dongs.map(function(d){
+        return '<button type="button" class="complex-menu-item' + (d === state.dongFilter ? ' active' : '') + '" data-value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</button>';
+      }).join('');
+    document.getElementById('dongFilterLabel').textContent = state.dongFilter || '전체 동';
 
-    floorSel.innerHTML = '<option value="">전체 층</option>' + floors.map(function(f){
-      return '<option value="' + escapeHtml(f) + '"' + (f === state.floorFilter ? ' selected' : '') + '>' + escapeHtml(f) + '층</option>';
-    }).join('');
+    var floorMenu = document.getElementById('floorFilterMenu');
+    floorMenu.innerHTML = '<button type="button" class="complex-menu-item' + (!state.floorFilter ? ' active' : '') + '" data-value="">전체 층</button>' +
+      floors.map(function(f){
+        return '<button type="button" class="complex-menu-item' + (f === state.floorFilter ? ' active' : '') + '" data-value="' + escapeHtml(f) + '">' + escapeHtml(f) + '층</button>';
+      }).join('');
+    document.getElementById('floorFilterLabel').textContent = state.floorFilter ? (state.floorFilter + '층') : '전체 층';
   }
 
   function render(){
@@ -1024,7 +1058,7 @@
     document.getElementById('statMax').textContent = effMaxs.length ? formatManwon(Math.max.apply(null,effMaxs)) : '-';
 
     renderDistribution(items);
-    populateFilterSelects(state.items);
+    populateFilterMenus(state.items);
 
     var filterBarEl = document.getElementById('listFilterBar');
     var listItems = items;
@@ -1203,13 +1237,26 @@
     switchComplex(item.dataset.id);
   });
 
+  function closeUnrelatedDropdownFilters(target){
+    document.querySelectorAll('.dropdown-filter').forEach(function(df){
+      if (target && df.contains(target)) return;
+      var menu = df.querySelector('.complex-menu');
+      var btn = df.querySelector('.complex-switch-btn');
+      if (menu) menu.hidden = true;
+      if (btn){ btn.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+    });
+  }
+
   document.addEventListener('click', function(e){
     var switcher = document.querySelector('.complex-switcher');
     if (switcher && !switcher.contains(e.target)) setComplexMenuOpen(false);
+    closeUnrelatedDropdownFilters(e.target);
   });
 
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') setComplexMenuOpen(false);
+    if (e.key !== 'Escape') return;
+    setComplexMenuOpen(false);
+    closeUnrelatedDropdownFilters(null);
   });
 
   function renderComplexTexts(){
