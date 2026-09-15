@@ -139,12 +139,19 @@
   .dist-footer b{ font-size:15px; font-family:'IBM Plex Sans KR',sans-serif; }
 
   /* sort tabs */
-  .sort-row{ display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
+  .sort-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
+  .sort-btns{ display:flex; gap:6px; flex:none; }
   .sort-btn{
     font:inherit; font-size:13px; font-weight:600; padding:7px 13px; border-radius:999px; border:1px solid var(--border);
     background:var(--surface); color:var(--text-muted); cursor:pointer; white-space:nowrap; flex:none;
   }
   .sort-btn[aria-pressed="true"]{ background:var(--chip); color:var(--chip-text); border-color:var(--chip); }
+
+  .list-filters{ display:flex; gap:6px; flex:none; }
+  .filter-select{
+    font:inherit; font-size:12px; font-weight:600; padding:7px 10px; border-radius:999px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text-muted); cursor:pointer; flex:none;
+  }
 
   /* list */
   .list-filter-bar{
@@ -265,6 +272,7 @@
   @media (max-width:480px){
     .header h1{ font-size:21px; }
     .complex-switch-btn{ font-size:11px; padding:7px 10px; }
+    .sort-row{ flex-wrap:wrap; overflow-x:visible; }
     .stats{ grid-template-columns:repeat(2,1fr); }
     .kb-price-grid{ grid-template-columns:1fr; }
     .form-grid{ grid-template-columns:1fr; }
@@ -319,10 +327,16 @@
   </div>
 
   <div class="sort-row" id="sortRow">
-    <button class="sort-btn" data-sort="priceAsc" aria-pressed="true">가격 낮은순</button>
-    <button class="sort-btn" data-sort="priceDesc">가격 높은순</button>
-    <button class="sort-btn" data-sort="confirmedDesc">최신순</button>
-    <button class="sort-btn" data-sort="confirmedAsc">과거순</button>
+    <div class="sort-btns">
+      <button class="sort-btn" data-sort="priceAsc" aria-pressed="true">가격 낮은순</button>
+      <button class="sort-btn" data-sort="priceDesc">가격 높은순</button>
+      <button class="sort-btn" data-sort="confirmedDesc">최신순</button>
+      <button class="sort-btn" data-sort="confirmedAsc">과거순</button>
+    </div>
+    <div class="list-filters">
+      <select id="dongFilterSelect" class="filter-select" aria-label="동 필터"><option value="">전체 동</option></select>
+      <select id="floorFilterSelect" class="filter-select" aria-label="층 필터"><option value="">전체 층</option></select>
+    </div>
   </div>
 
   <div class="list-filter-bar" id="listFilterBar"></div>
@@ -363,7 +377,7 @@
           </div>
           <div>
             <label for="f_floor">층</label>
-            <input type="text" id="f_floor" placeholder="예: 25/25층">
+            <input type="text" id="f_floor" placeholder="예: 25/25층 또는 고/25층">
           </div>
           <div>
             <label for="f_latest_price">최근가격</label>
@@ -416,7 +430,7 @@
 (function(){
   var state = {
     items: [], sort: 'priceAsc', editingId: null, editingTags: null, distFilter: null, kbPrice: null,
-    complexId: null, complexes: []
+    complexId: null, complexes: [], dongFilter: '', floorFilter: ''
   };
   var pendingTags = [];
   var COMPLEX_STORAGE_KEY = 'realEstateTracker.lastComplexId';
@@ -499,6 +513,31 @@
 
   function keyOf(it){ return [it.dong, it.floorText, it.priceRaw].join('__'); }
 
+  function floorTokenOf(floorText){
+    if (!floorText) return '';
+    var m = floorText.match(/^([^\/]+)/);
+    return m ? m[1].trim() : '';
+  }
+
+  function compareDong(a, b){
+    var na = parseInt(a, 10), nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    return a.localeCompare(b);
+  }
+
+  var FLOOR_TOKEN_ORDER = { '저':0, '중':1, '고':2 };
+  function compareFloorTokens(a, b){
+    var na = parseInt(a, 10), nb = parseInt(b, 10);
+    var aIsNum = !isNaN(na) && String(na) === a;
+    var bIsNum = !isNaN(nb) && String(nb) === b;
+    if (aIsNum && bIsNum) return na - nb;
+    if (aIsNum !== bIsNum) return aIsNum ? -1 : 1;
+    var oa = FLOOR_TOKEN_ORDER.hasOwnProperty(a) ? FLOOR_TOKEN_ORDER[a] : 99;
+    var ob = FLOOR_TOKEN_ORDER.hasOwnProperty(b) ? FLOOR_TOKEN_ORDER[b] : 99;
+    if (oa !== ob) return oa - ob;
+    return a.localeCompare(b);
+  }
+
   var DIRECTION_WORDS = ['남동향','남서향','북동향','북서향','남향','북향','동향','서향'];
   var NOTE_LINE_BLOCKLIST = ['알림관심매물','공유하기'];
 
@@ -532,7 +571,7 @@
         if (!line) continue;
         if (/^매매\s/.test(line) || /^전세\s/.test(line)) break;
 
-        var floorMatch = line.match(/(\d{1,3})\s*\/\s*(\d{1,3})\s*층/);
+        var floorMatch = line.match(/(\d{1,3}|고|중|저)\s*\/\s*(\d{1,3})\s*층/);
         if (floorMatch && !floorText) floorText = floorMatch[1] + '/' + floorMatch[2] + '층';
 
         var directionMatch = null;
@@ -617,6 +656,15 @@
       state.sort = btn.dataset.sort;
       render();
     });
+  });
+
+  document.getElementById('dongFilterSelect').addEventListener('change', function(){
+    state.dongFilter = this.value;
+    render();
+  });
+  document.getElementById('floorFilterSelect').addEventListener('change', function(){
+    state.floorFilter = this.value;
+    render();
   });
 
   function activateTab(tabName){
@@ -929,6 +977,32 @@
     });
   }
 
+  function distinctSorted(values, cmp){
+    var seen = {};
+    var out = [];
+    values.forEach(function(v){
+      if (v && !seen[v]){ seen[v] = true; out.push(v); }
+    });
+    out.sort(cmp);
+    return out;
+  }
+
+  function populateFilterSelects(allItems){
+    var dongSel = document.getElementById('dongFilterSelect');
+    var floorSel = document.getElementById('floorFilterSelect');
+
+    var dongs = distinctSorted(allItems.map(function(it){ return it.dong; }), compareDong);
+    var floors = distinctSorted(allItems.map(function(it){ return floorTokenOf(it.floorText); }), compareFloorTokens);
+
+    dongSel.innerHTML = '<option value="">전체 동</option>' + dongs.map(function(d){
+      return '<option value="' + escapeHtml(d) + '"' + (d === state.dongFilter ? ' selected' : '') + '>' + escapeHtml(d) + '</option>';
+    }).join('');
+
+    floorSel.innerHTML = '<option value="">전체 층</option>' + floors.map(function(f){
+      return '<option value="' + escapeHtml(f) + '"' + (f === state.floorFilter ? ' selected' : '') + '>' + escapeHtml(f) + '층</option>';
+    }).join('');
+  }
+
   function render(){
     var items = state.items.slice();
     switch(state.sort){
@@ -948,13 +1022,24 @@
     document.getElementById('statMax').textContent = effMaxs.length ? formatManwon(Math.max.apply(null,effMaxs)) : '-';
 
     renderDistribution(items);
+    populateFilterSelects(state.items);
 
     var filterBarEl = document.getElementById('listFilterBar');
     var listItems = items;
     if (state.distFilter){
       var idSet = {};
       state.distFilter.ids.forEach(function(id){ idSet[id] = true; });
-      listItems = items.filter(function(it){ return idSet[it.id]; });
+      listItems = listItems.filter(function(it){ return idSet[it.id]; });
+    }
+    if (state.dongFilter){
+      listItems = listItems.filter(function(it){ return it.dong === state.dongFilter; });
+    }
+    if (state.floorFilter){
+      listItems = listItems.filter(function(it){ return floorTokenOf(it.floorText) === state.floorFilter; });
+    }
+    var hasActiveFilter = !!(state.distFilter || state.dongFilter || state.floorFilter);
+
+    if (state.distFilter){
       filterBarEl.style.display = 'flex';
       filterBarEl.innerHTML = '<span>가격 <b>' + escapeHtml(state.distFilter.rangeText) + '</b> 구간 매물 ' + listItems.length + '건 보는 중</span>' +
         '<button type="button" class="icon-btn" id="clearDistFilterBtn">전체 매물 보기</button>';
@@ -971,8 +1056,8 @@
     if (!listItems.length){
       var currentComplex = state.complexes.find(function(c){ return c.id === state.complexId; });
       var complexLabel = currentComplex ? (currentComplex.name + ' · ' + currentComplex.areaLabel) : '매매';
-      listEl.innerHTML = '<div class="empty">' + (state.distFilter
-        ? '이 가격 구간에 해당하는 매물이 없어요.'
+      listEl.innerHTML = '<div class="empty">' + (hasActiveFilter
+        ? '조건에 해당하는 매물이 없어요.'
         : '아직 등록된 매물이 없어요.<br>네이버 부동산에서 <b>' + escapeHtml(complexLabel) + '</b> 매물 목록을 복사해 아래 붙여넣기 칸에 넣거나, 직접 입력해 보세요.') + '</div>';
       return;
     }
@@ -1009,8 +1094,8 @@
           }).join('')
         : '';
 
-      var floorNumMatch = (it.floorText || '').match(/^(\d+)/);
-      var titleText = it.dong + (floorNumMatch ? ' ' + floorNumMatch[1] + '층' : '');
+      var floorToken = floorTokenOf(it.floorText);
+      var titleText = it.dong + (floorToken ? ' ' + floorToken + '층' : '');
 
       return '' +
         '<div class="card">' +
@@ -1151,6 +1236,7 @@
     state.complexId = newId;
     storeComplexId(newId);
     state.editingId = null; state.editingTags = null; state.distFilter = null;
+    state.dongFilter = ''; state.floorFilter = '';
     state.items = []; state.kbPrice = null;
     populateComplexMenu();
     renderComplexTexts();
