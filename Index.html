@@ -1,0 +1,999 @@
+<!-- 구로두산 매매 트래커 — Google Apps Script Index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>구로두산 매매 트래커</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Gothic+A1:wght@400;500;700&display=swap">
+<style>
+  :root{
+    --bg:#F5F6F5; --surface:#FFFFFF; --surface-2:#EEF1EE; --border:#E1E5E1;
+    --text:#16181A; --text-muted:#6B7280;
+    --primary:#03C75A; --primary-strong:#02A64B; --on-primary:#FFFFFF;
+    --chip:#17181A; --chip-text:#FFFFFF;
+    --new:#D8492E; --new-bg:#FBE9E4;
+    --status-new:var(--new); --status-new-bg:var(--new-bg);
+    --status-hold:#B8790E; --status-hold-bg:#FBF0DC;
+    --status-interested:#DB2777; --status-interested-bg:#FCE7F3;
+    --status-unavailable:#5B6472; --status-unavailable-bg:#ECEEF0;
+    --price-up:#E03131; --price-down:#1971C2;
+    --link-color:#2563EB; --link-bg:#E9EFFD;
+    --tag-active:var(--chip); --tag-active-text:var(--chip-text);
+    --shadow:0 1px 2px rgba(23,40,32,0.06), 0 4px 14px rgba(23,40,32,0.06);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1512; --surface:#161F1A; --surface-2:#1D2721; --border:#2B372F;
+      --text:#E7EDE6; --text-muted:#9AAAA0;
+      --primary:#2ED679; --primary-strong:#22B865; --on-primary:#08150F;
+      --chip:#E7EDE6; --chip-text:#12160F;
+      --new:#FF7A5C; --new-bg:#3A1D16;
+      --status-new:var(--new); --status-new-bg:var(--new-bg);
+      --status-hold:#E3A63E; --status-hold-bg:#3A2C12;
+      --status-interested:#F472B6; --status-interested-bg:#4A1942;
+      --status-unavailable:#9AA3AD; --status-unavailable-bg:#262B30;
+      --price-up:#FF6B6B; --price-down:#74C0FC;
+      --link-color:#60A5FA; --link-bg:#16233B;
+      --tag-active:var(--chip); --tag-active-text:var(--chip-text);
+      --shadow:0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1512; --surface:#161F1A; --surface-2:#1D2721; --border:#2B372F;
+    --text:#E7EDE6; --text-muted:#9AAAA0;
+    --primary:#2ED679; --primary-strong:#22B865; --on-primary:#08150F;
+    --chip:#E7EDE6; --chip-text:#12160F;
+    --new:#FF7A5C; --new-bg:#3A1D16;
+    --status-new:var(--new); --status-new-bg:var(--new-bg);
+    --status-hold:#E3A63E; --status-hold-bg:#3A2C12;
+    --status-interested:#F472B6; --status-interested-bg:#4A1942;
+    --status-unavailable:#9AA3AD; --status-unavailable-bg:#262B30;
+    --price-up:#FF6B6B; --price-down:#74C0FC;
+    --link-color:#60A5FA; --link-bg:#16233B;
+    --tag-active:var(--chip); --tag-active-text:var(--chip-text);
+    --shadow:0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  html, body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Gothic A1','Apple SD Gothic Neo',sans-serif;
+  }
+  body{ padding:0 16px; padding-block:28px 60px; }
+  h1,h2,h3,.font-display{ font-family:'IBM Plex Sans KR','Malgun Gothic',sans-serif; }
+  .wrap{ max-width:720px; margin:0 auto; }
+
+  /* header */
+  .header{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+  .header h1{ font-size:26px; font-weight:700; margin:0 0 4px; text-wrap:balance; }
+  .header .subtitle{ font-size:14px; color:var(--text-muted); margin:0; }
+  .header .subtitle b{ color:var(--text); font-weight:600; }
+
+  /* stats */
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+  .stat-tile{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; }
+  .stat-tile .label{ font-size:12px; color:var(--text-muted); margin-bottom:4px; }
+  .stat-tile .value{ font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; font-family:'IBM Plex Sans KR',sans-serif; }
+  .stat-tile.available .value{ color:var(--primary); }
+
+  /* KB 시세 */
+  .kb-price{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:18px; }
+  .kb-price-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; }
+  .kb-price-header h2{ font-size:16px; margin:0; }
+  .kb-price-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .kb-price-item .label{ font-size:12px; color:var(--text-muted); margin-bottom:6px; }
+  .kb-price-item .value{ font-family:'IBM Plex Sans KR',sans-serif; font-weight:700; font-size:20px; font-variant-numeric:tabular-nums; }
+  .kb-price-item .date{ font-size:12px; color:var(--text-muted); margin-top:4px; }
+  .kb-price-empty{ font-size:13px; color:var(--text-muted); margin:0; grid-column:1 / -1; }
+  .kb-price-footer{ margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); }
+
+  /* distribution */
+  .distribution{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:18px; }
+  .dist-header{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; }
+  .dist-header h2{ font-size:16px; margin:0; }
+  .dist-header .dist-sub{ font-size:12px; color:var(--text-muted); }
+  .dist-empty{ font-size:13px; color:var(--text-muted); margin:0; padding:10px 0; }
+  .dist-chart{ position:relative; padding-top:44px; }
+  .dist-bars{ display:flex; align-items:flex-end; gap:8px; height:96px; }
+  .dist-bar{ flex:1; background:var(--surface-2); border-radius:6px 6px 2px 2px; min-height:6px; cursor:pointer; transition:background .1s; }
+  .dist-bar:hover, .dist-bar.hover{ background:var(--primary); }
+  .dist-callout{
+    position:absolute; top:0; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border);
+    border-radius:999px; padding:8px 14px; font-size:13px; font-weight:700; white-space:nowrap; box-shadow:var(--shadow);
+    pointer-events:none;
+  }
+  .dist-callout .count{ color:var(--text-muted); font-weight:600; margin-left:4px; }
+  .dist-callout::after{
+    content:''; position:absolute; left:50%; bottom:-16px; width:1px; height:16px; background:var(--border); transform:translateX(-50%);
+  }
+  .dist-labels{ display:flex; justify-content:space-between; margin-top:8px; font-size:13px; font-weight:700; font-family:'IBM Plex Sans KR',sans-serif; }
+  .dist-footer{ display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); font-size:14px; }
+  .dist-footer b{ font-size:15px; font-family:'IBM Plex Sans KR',sans-serif; }
+
+  /* sort tabs */
+  .sort-row{ display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
+  .sort-btn{
+    font:inherit; font-size:13px; font-weight:600; padding:7px 13px; border-radius:999px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text-muted); cursor:pointer; white-space:nowrap; flex:none;
+  }
+  .sort-btn[aria-pressed="true"]{ background:var(--chip); color:var(--chip-text); border-color:var(--chip); }
+
+  /* list */
+  .list-filter-bar{
+    display:none; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:9px 12px;
+    margin-bottom:10px; font-size:13px; color:var(--text-muted);
+  }
+  .list-filter-bar b{ color:var(--text); }
+  .list{ display:flex; flex-direction:column; gap:10px; margin-bottom:28px; }
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow);
+  }
+  .card .main{ flex:1; min-width:0; }
+  .card .row1{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
+  .card .dong{ font-family:'IBM Plex Sans KR',sans-serif; font-weight:700; font-size:15px; margin-right:2px; }
+  .link-chip{
+    font-size:11px; font-weight:600; color:var(--link-color); background:var(--link-bg); border:1px solid var(--link-bg);
+    padding:2px 8px; border-radius:999px; text-decoration:none; flex:none; white-space:nowrap;
+  }
+  .link-chip:hover{ background:var(--link-color); color:var(--on-primary); border-color:var(--link-color); }
+  .tag-pill{
+    font:inherit; font-size:11px; font-weight:600; color:var(--text-muted); background:var(--surface-2); border:none;
+    padding:2px 8px; border-radius:999px; white-space:nowrap; cursor:pointer;
+  }
+  .tag-pill:hover{ color:var(--tag-active); }
+  .tag-pill.active{ color:var(--tag-active-text); background:var(--tag-active); }
+  .card .meta{ font-size:13px; color:var(--text-muted); }
+  .card .meta span + span::before{ content:"·"; margin:0 5px; }
+  .card .note{ font-size:12px; color:var(--text-muted); margin-top:4px; font-style:italic; }
+  .card .price{ text-align:right; flex:none; }
+  .card .price .amount{
+    display:flex; align-items:baseline; justify-content:flex-end; gap:4px;
+    font-family:'IBM Plex Sans KR',sans-serif; font-weight:700; font-size:18px; font-variant-numeric:tabular-nums;
+  }
+  .price-arrow{ font-size:13px; }
+  .price-arrow.up{ color:var(--price-up); }
+  .price-arrow.down{ color:var(--price-down); }
+  .card .price .raw{ font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .card .actions{ display:flex; flex-direction:column; gap:6px; flex:none; align-items:stretch; }
+  .icon-btn{
+    font:inherit; font-size:12px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted);
+    border-radius:8px; padding:5px 8px; cursor:pointer; white-space:nowrap;
+  }
+  .icon-btn:hover{ color:var(--text); }
+  .icon-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .status-btn{
+    font:inherit; font-weight:700; font-size:12px; letter-spacing:.2px; border-radius:8px; padding:6px 10px;
+    cursor:pointer; white-space:nowrap; border:1px solid transparent; text-align:center;
+  }
+  .status-btn.status-new{ color:var(--status-new); background:var(--status-new-bg); border-color:var(--status-new); }
+  .status-btn.status-hold{ color:var(--status-hold); background:var(--status-hold-bg); border-color:var(--status-hold); }
+  .status-btn.status-interested{ color:var(--status-interested); background:var(--status-interested-bg); border-color:var(--status-interested); }
+  .status-btn.status-unavailable{ color:var(--status-unavailable); background:var(--status-unavailable-bg); border-color:var(--status-unavailable); }
+
+  .card.is-editing{ flex-direction:column; align-items:stretch; }
+  .edit-form{ width:100%; }
+  .edit-form .form-grid{ margin-bottom:10px; }
+  .edit-form .btn-row{ display:flex; gap:8px; }
+
+  .empty{
+    background:var(--surface); border:1px dashed var(--border); border-radius:var(--radius);
+    padding:32px 20px; text-align:center; color:var(--text-muted); font-size:14px; line-height:1.7;
+  }
+  .empty b{ color:var(--text); }
+
+  /* add section */
+  .add-section{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+  .add-section h2{ font-size:16px; margin:0 0 12px; }
+  .tabs{ display:flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:10px; margin-bottom:14px; width:fit-content; }
+  .tab-btn{ font:inherit; font-size:13px; font-weight:600; padding:6px 14px; border-radius:8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .tab-btn[aria-selected="true"]{ background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  textarea{
+    width:100%; min-height:130px; font:13px/1.6 ui-monospace,'IBM Plex Mono',monospace; padding:10px 12px;
+    border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); resize:vertical;
+  }
+  .hint{ font-size:12px; color:var(--text-muted); margin:8px 0 12px; line-height:1.6; }
+  details.example{ margin:8px 0 12px; }
+  details.example summary{ font-size:12px; color:var(--primary); cursor:pointer; font-weight:600; }
+  details.example pre{
+    font:11px/1.5 ui-monospace,monospace; background:var(--surface-2); border-radius:8px; padding:10px;
+    margin-top:6px; white-space:pre-wrap; color:var(--text-muted);
+  }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .form-grid .full{ grid-column:1 / -1; }
+  label{ display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px; font-weight:600; }
+  input[type=text], input[type=number], input[type=date], select{
+    width:100%; font:13px/1.4 'Gothic A1',sans-serif; padding:8px 10px; border-radius:8px;
+    border:1px solid var(--border); background:var(--bg); color:var(--text);
+  }
+  .tag-input-row{ display:flex; gap:8px; }
+  .tag-input-row input{ flex:1; }
+  .tag-input-row .icon-btn{ flex:none; }
+  .tag-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .tag-chip{
+    display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--text-muted);
+    background:var(--surface-2); border:1px solid var(--border); padding:3px 8px 3px 10px; border-radius:999px; white-space:nowrap;
+  }
+  .tag-chip button{ border:none; background:none; color:var(--text-muted); cursor:pointer; font-size:12px; line-height:1; padding:0; }
+  .tag-chip button:hover{ color:var(--new); }
+  .btn-primary{
+    font:inherit; font-weight:700; font-size:14px; background:var(--primary); color:var(--on-primary);
+    border:none; border-radius:10px; padding:10px 18px; cursor:pointer;
+  }
+  .btn-primary:hover{ background:var(--primary-strong); }
+  .btn-primary:disabled{ opacity:.5; cursor:not-allowed; }
+  .result-msg{ font-size:13px; margin-top:10px; padding:9px 12px; border-radius:8px; display:none; }
+  .result-msg.show{ display:block; }
+  .result-msg.ok{ background:var(--new-bg); color:var(--new); }
+  .result-msg.info{ background:var(--surface-2); color:var(--text-muted); }
+
+  .footnote{ font-size:12px; color:var(--text-muted); text-align:center; margin-top:20px; line-height:1.7; }
+  .load-banner{ background:var(--surface-2); color:var(--text-muted); border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
+
+  @media (max-width:480px){
+    .stats{ grid-template-columns:repeat(2,1fr); }
+    .kb-price-grid{ grid-template-columns:1fr; }
+    .form-grid{ grid-template-columns:1fr; }
+    .card{ flex-wrap:wrap; }
+    .card .price{ text-align:left; }
+    .card .price .amount{ justify-content:flex-start; }
+    .dist-bars{ height:76px; }
+    .dist-callout{ font-size:12px; padding:6px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>구로두산</h1>
+      <p class="subtitle">매매 · 전용 <b>66㎡</b>(전용44.64) 매물 트래커</p>
+    </div>
+  </div>
+
+  <div id="loadBanner" class="load-banner">불러오는 중…</div>
+
+  <div class="stats">
+    <div class="stat-tile"><div class="label">전체 매물</div><div class="value" id="statTotal">0</div></div>
+    <div class="stat-tile available"><div class="label">가능 매물</div><div class="value" id="statAvailable">0</div></div>
+    <div class="stat-tile"><div class="label">최저가</div><div class="value" id="statMin">-</div></div>
+    <div class="stat-tile"><div class="label">최고가</div><div class="value" id="statMax">-</div></div>
+  </div>
+
+  <div class="kb-price">
+    <div class="kb-price-header">
+      <h2>시세 (KB부동산)</h2>
+      <button type="button" class="icon-btn" id="kbRefreshBtn">🔄 새로고침</button>
+    </div>
+    <div class="kb-price-grid" id="kbPriceGrid"></div>
+    <div class="kb-price-footer" id="kbPriceFooter"></div>
+    <div class="result-msg" id="kbRefreshMsg"></div>
+  </div>
+
+  <div class="distribution">
+    <div class="dist-header">
+      <h2>매물 분포</h2>
+      <span class="dist-sub">전용 66㎡ · 매매</span>
+    </div>
+    <div id="distBody"></div>
+  </div>
+
+  <div class="sort-row" id="sortRow">
+    <button class="sort-btn" data-sort="priceAsc" aria-pressed="true">가격 낮은순</button>
+    <button class="sort-btn" data-sort="priceDesc">가격 높은순</button>
+    <button class="sort-btn" data-sort="confirmedDesc">최신순</button>
+    <button class="sort-btn" data-sort="confirmedAsc">과거순</button>
+  </div>
+
+  <div class="list-filter-bar" id="listFilterBar"></div>
+  <div class="list" id="list"></div>
+
+  <div class="add-section">
+    <h2>매물 추가</h2>
+    <div class="tabs" role="tablist">
+      <button class="tab-btn" data-tab="paste" aria-selected="true">붙여넣기로 추가</button>
+      <button class="tab-btn" data-tab="manual" aria-selected="false">직접 입력</button>
+    </div>
+
+    <div class="panel active" data-panel="paste">
+      <p class="hint">네이버 부동산에서 <b>매매 · 66㎡</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.</p>
+      <details class="example">
+        <summary>붙여넣기 예시 형식 보기</summary>
+        <pre>구로두산 103동
+매매 7억 2,000 ~ 7억 3,000
+아파트 | 66㎡ (전용44.64) | 25/25층 | 북동향
+집주인 확인매물 2026.09.14
+중개사 10곳에서 등록했어요</pre>
+      </details>
+      <textarea id="pasteInput" placeholder="여기에 네이버 부동산 매물 목록을 붙여넣으세요"></textarea>
+      <div style="margin-top:12px;"><button class="btn-primary" id="parseBtn">붙여넣은 매물 반영하기</button></div>
+      <div class="result-msg" id="pasteResult"></div>
+    </div>
+
+    <div class="panel" data-panel="manual">
+      <form id="manualForm">
+        <div class="form-grid">
+          <div>
+            <label for="f_dong">동</label>
+            <input type="text" id="f_dong" placeholder="예: 103동" required>
+          </div>
+          <div>
+            <label for="f_price">가격</label>
+            <input type="text" id="f_price" placeholder="예: 7억 2,000 ~ 7억 3,000" required>
+          </div>
+          <div>
+            <label for="f_floor">층</label>
+            <input type="text" id="f_floor" placeholder="예: 25/25층">
+          </div>
+          <div>
+            <label for="f_latest_price">최근가격</label>
+            <input type="text" id="f_latest_price" placeholder="예: 7억 6,000 (선택)">
+          </div>
+          <div>
+            <label for="f_direction">방향</label>
+            <select id="f_direction">
+              <option value="">선택 안 함</option>
+              <option>남향</option><option>남동향</option><option>남서향</option>
+              <option>동향</option><option>서향</option>
+              <option>북향</option><option>북동향</option><option>북서향</option>
+            </select>
+          </div>
+          <div>
+            <label for="f_date">확인일자</label>
+            <input type="date" id="f_date">
+          </div>
+          <div>
+            <label for="f_broker">등록 중개사 수</label>
+            <input type="number" id="f_broker" min="0" placeholder="예: 10">
+          </div>
+          <div class="full">
+            <label for="f_tag_input">태그</label>
+            <div class="tag-input-row">
+              <input type="text" id="f_tag_input" placeholder="태그 입력 후 Enter">
+              <button type="button" class="icon-btn" id="f_tag_add">추가</button>
+            </div>
+            <div class="tag-list" id="f_tag_list"></div>
+          </div>
+          <div class="full">
+            <label for="f_link">링크</label>
+            <input type="text" id="f_link" placeholder="네이버 부동산 매물 링크 (선택 사항)">
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" id="manualSubmitBtn">매물 추가하기</button>
+      </form>
+      <div class="result-msg" id="manualResult"></div>
+    </div>
+  </div>
+
+  <p class="footnote">이 페이지는 네이버 부동산과 자동으로 연동되지 않는 수동 기록 도구예요.<br>매물 정보를 복사해 붙여넣거나 직접 입력하면 이전 목록과 비교해 새 매물을 표시해줘요.</p>
+</div>
+
+<script>
+(function(){
+  var state = { items: [], sort: 'priceAsc', editingId: null, editingTags: null, distFilter: null, kbPrice: null };
+  var pendingTags = [];
+
+  var DIRECTIONS = ['남향','남동향','남서향','동향','서향','북향','북동향','북서향'];
+
+  var STATUS_FLOW = ['new','hold','interested','unavailable'];
+  var STATUS_LABEL = { new:'신규', hold:'보류', interested:'관심', unavailable:'불가' };
+  function nextStatus(s){
+    var i = STATUS_FLOW.indexOf(s);
+    if (i === -1) i = 0;
+    return STATUS_FLOW[(i + 1) % STATUS_FLOW.length];
+  }
+
+  function gsCall(name){
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function(resolve, reject){
+      var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      runner[name].apply(runner, args);
+    });
+  }
+
+  function parsePrice(str){
+    var clean = (str||'').replace(/\s+/g,' ').trim();
+    var parts = clean.split(/~|-/).map(function(s){return s.trim();}).filter(Boolean);
+    function toManwon(s){
+      var total = 0, matched = false;
+      var eok = s.match(/([\d.]+)\s*억/);
+      if (eok){ total += parseFloat(eok[1]) * 10000; matched = true; }
+      var rest = s.replace(/[\d.]+\s*억/,'');
+      var man = rest.match(/([\d,]+)/);
+      if (man && man[1]){
+        var n = parseInt(man[1].replace(/,/g,''), 10);
+        if (!isNaN(n)){ total += n; matched = true; }
+      }
+      return matched ? total : null;
+    }
+    var nums = parts.map(toManwon);
+    if (nums.length && nums.every(function(n){ return n != null; })){
+      return { min: Math.min.apply(null, nums), max: Math.max.apply(null, nums) };
+    }
+    return { min: null, max: null };
+  }
+
+  function formatManwon(v){
+    if (v == null || !isFinite(v)) return '-';
+    var eok = Math.floor(v/10000), man = Math.round(v % 10000);
+    if (eok === 0) return man.toLocaleString() + '만';
+    if (man === 0) return eok + '억';
+    return eok + '억 ' + man.toLocaleString();
+  }
+
+  function midOf(min, max){
+    if (min != null && max != null) return (min + max) / 2;
+    if (min != null) return min;
+    if (max != null) return max;
+    return null;
+  }
+
+  function repPrice(it){
+    var min = it.latestPriceMin != null ? it.latestPriceMin : it.priceMin;
+    var max = it.latestPriceMax != null ? it.latestPriceMax : it.priceMax;
+    return midOf(min, max);
+  }
+
+  function normalizeDate(s){
+    if (!s) return '';
+    var parts = s.split(/[.\-]/).filter(Boolean);
+    if (parts.length < 3) return s;
+    var y = parts[0], m = ('' + parts[1]).padStart(2,'0'), d = ('' + parts[2]).padStart(2,'0');
+    return y + '.' + m + '.' + d;
+  }
+
+  function keyOf(it){ return [it.dong, it.floorText, it.priceRaw].join('__'); }
+
+  function parseBulkText(raw){
+    var lines = raw.split('\n').map(function(l){ return l.trim(); });
+    var entries = [];
+    for (var i=0;i<lines.length;i++){
+      var priceMatch = lines[i].match(/^매매\s*([\d][\d,.\s~억만]*)/);
+      if (!priceMatch) continue;
+      var priceRaw = priceMatch[1].trim().replace(/\s+/g,' ').replace(/[~,.\s]+$/,'');
+
+      var dong = null;
+      for (var j=i-1; j>=Math.max(0,i-4); j--){
+        var m = lines[j].match(/(\d+동)\s*$/);
+        if (m){ dong = m[1]; break; }
+      }
+
+      var floorText='', direction='', area='', confirmedDate='', brokerCount=null;
+      for (var k=i+1; k<Math.min(lines.length,i+7); k++){
+        var line = lines[k];
+        if (!line) continue;
+        if (/^매매\s/.test(line) || /^전세\s/.test(line)) break;
+        if (/㎡/.test(line) && /층/.test(line)){
+          var parts = line.split('|').map(function(s){ return s.trim(); });
+          parts.forEach(function(p){
+            if (/층/.test(p)) floorText = p;
+            else if (/향$/.test(p)) direction = p;
+            else if (/㎡/.test(p)) area = p;
+          });
+        } else if (/확인매물/.test(line)){
+          var dm = line.match(/(\d{4}[.\-]\d{1,2}[.\-]\d{1,2})/);
+          if (dm) confirmedDate = normalizeDate(dm[1]);
+        } else if (/중개사/.test(line)){
+          var bm = line.match(/(\d+)\s*곳/);
+          if (bm) brokerCount = parseInt(bm[1],10);
+        }
+      }
+      if (area && area.indexOf('66') === -1) continue;
+      entries.push({
+        dong: dong || '동 미상', priceRaw: priceRaw, floorText: floorText,
+        direction: direction, confirmedDate: confirmedDate, brokerCount: brokerCount, link: ''
+      });
+    }
+    return entries;
+  }
+
+  async function refreshData(){
+    try {
+      var data = await gsCall('gsGetData');
+      state.items = data.listings || [];
+      state.kbPrice = data.kbPrice || null;
+      var banner = document.getElementById('loadBanner');
+      if (banner) banner.remove();
+      render();
+      renderKbPrice();
+    } catch (err){
+      var banner2 = document.getElementById('loadBanner');
+      if (banner2) banner2.textContent = '데이터를 불러오지 못했어요: ' + (err && err.message ? err.message : err);
+    }
+  }
+
+  async function addOne(entry){
+    var priced = parsePrice(entry.priceRaw);
+    var latestPriced = parsePrice(entry.latestPriceRaw || '');
+    var res = await gsCall('gsAddListing', {
+      dong: entry.dong, priceRaw: entry.priceRaw, priceMin: priced.min, priceMax: priced.max,
+      latestPriceRaw: entry.latestPriceRaw || '', latestPriceMin: latestPriced.min, latestPriceMax: latestPriced.max,
+      floorText: entry.floorText || '', direction: entry.direction || '',
+      confirmedDate: entry.confirmedDate || '', brokerCount: (entry.brokerCount != null ? entry.brokerCount : null),
+      tags: entry.tags || [], link: entry.link || ''
+    });
+    return !!(res && res.added);
+  }
+
+  async function addBulk(entries){
+    var payload = entries.map(function(entry){
+      var priced = parsePrice(entry.priceRaw);
+      return {
+        dong: entry.dong, priceRaw: entry.priceRaw, priceMin: priced.min, priceMax: priced.max,
+        floorText: entry.floorText || '', direction: entry.direction || '',
+        confirmedDate: entry.confirmedDate || '', brokerCount: (entry.brokerCount != null ? entry.brokerCount : null)
+      };
+    });
+    var res = await gsCall('gsAddListingsBulk', payload);
+    return res;
+  }
+
+
+  document.querySelectorAll('.sort-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.sort-btn').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+      btn.setAttribute('aria-pressed','true');
+      state.sort = btn.dataset.sort;
+      render();
+    });
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.setAttribute('aria-selected','false'); });
+      document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
+      btn.setAttribute('aria-selected','true');
+      document.querySelector('.panel[data-panel="'+btn.dataset.tab+'"]').classList.add('active');
+    });
+  });
+
+  function showResult(el, msg, cls){
+    el.textContent = msg;
+    el.className = 'result-msg show ' + cls;
+  }
+
+  function formatDateTime(iso){
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('ko-KR', { year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function renderKbPrice(){
+    var grid = document.getElementById('kbPriceGrid');
+    var footer = document.getElementById('kbPriceFooter');
+    var kb = state.kbPrice;
+    if (!kb){
+      grid.innerHTML = '<p class="kb-price-empty">아직 시세 정보가 없어요. 새로고침 버튼을 눌러 최신 시세를 가져와 보세요.</p>';
+      footer.textContent = '';
+      return;
+    }
+    grid.innerHTML =
+      '<div class="kb-price-item"><div class="label">KB시세 일반가</div><div class="value">' + escapeHtml(kb.generalPrice || '-') + '</div><div class="date">' + escapeHtml(kb.generalDate || '') + '</div></div>' +
+      '<div class="kb-price-item"><div class="label">최근 실거래가</div><div class="value">' + escapeHtml(kb.dealPrice || '-') + '</div><div class="date">' + escapeHtml([kb.dealDate, kb.dealFloor].filter(Boolean).join(' / ')) + '</div></div>';
+    footer.textContent = kb.fetchedAt ? ('마지막 확인 ' + formatDateTime(kb.fetchedAt)) : '';
+  }
+
+  document.getElementById('kbRefreshBtn').addEventListener('click', async function(){
+    var btn = this; btn.disabled = true;
+    var msgEl = document.getElementById('kbRefreshMsg');
+    try {
+      var kb = await gsCall('gsRefreshKbPrice');
+      state.kbPrice = kb;
+      renderKbPrice();
+      showResult(msgEl, 'KB부동산에서 최신 시세를 가져왔어요.', 'ok');
+    } catch (err){
+      showResult(msgEl, '시세를 가져오지 못했어요: ' + (err && err.message ? err.message : err), 'info');
+    }
+    btn.disabled = false;
+  });
+
+  function renderPendingTagsList(){
+    var listEl = document.getElementById('f_tag_list');
+    listEl.innerHTML = pendingTags.map(function(t, idx){
+      return '<span class="tag-chip">' + escapeHtml(t) + '<button type="button" data-idx="' + idx + '">×</button></span>';
+    }).join('');
+  }
+  document.getElementById('f_tag_list').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-idx]');
+    if (!btn) return;
+    pendingTags.splice(parseInt(btn.dataset.idx,10), 1);
+    renderPendingTagsList();
+  });
+  function addPendingTagFromInput(){
+    var input = document.getElementById('f_tag_input');
+    var val = input.value.trim();
+    if (val && pendingTags.indexOf(val) === -1){ pendingTags.push(val); input.value = ''; renderPendingTagsList(); }
+    input.focus();
+  }
+  document.getElementById('f_tag_add').addEventListener('click', addPendingTagFromInput);
+  document.getElementById('f_tag_input').addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && !e.isComposing){ e.preventDefault(); addPendingTagFromInput(); }
+  });
+
+  function addEditTagFromInput(inputEl){
+    if (!inputEl) return;
+    var val = inputEl.value.trim();
+    if (!state.editingTags) state.editingTags = [];
+    if (val && state.editingTags.indexOf(val) === -1){ state.editingTags.push(val); }
+    inputEl.value = '';
+    render();
+    var refocus = document.querySelector('.card.is-editing .e-tag-input');
+    if (refocus) refocus.focus();
+  }
+
+  document.getElementById('parseBtn').addEventListener('click', async function(){
+    var raw = document.getElementById('pasteInput').value;
+    var resultEl = document.getElementById('pasteResult');
+    if (!raw.trim()){ showResult(resultEl, '붙여넣은 내용이 없어요.', 'info'); return; }
+    var entries = parseBulkText(raw);
+    if (!entries.length){ showResult(resultEl, '매물을 인식하지 못했어요. 예시 형식을 확인해 주세요.', 'info'); return; }
+    var btn = this; btn.disabled = true;
+    try {
+      var res = await addBulk(entries);
+      await refreshData();
+      if (res.added > 0){
+        showResult(resultEl, '새 매물 ' + res.added + '건을 추가했어요' + (res.skipped ? ' (기존 ' + res.skipped + '건은 건너뜀)' : '') + '.', 'ok');
+        document.getElementById('pasteInput').value = '';
+      } else {
+        showResult(resultEl, '인식된 ' + entries.length + '건 모두 이미 등록된 매물이에요.', 'info');
+      }
+    } catch (err){
+      showResult(resultEl, '반영 중 오류가 발생했어요: ' + (err && err.message ? err.message : err), 'info');
+    }
+    btn.disabled = false;
+  });
+
+  document.getElementById('manualForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var resultEl = document.getElementById('manualResult');
+    var submitBtn = document.getElementById('manualSubmitBtn');
+    var entry = {
+      dong: document.getElementById('f_dong').value.trim(),
+      priceRaw: document.getElementById('f_price').value.trim(),
+      latestPriceRaw: document.getElementById('f_latest_price').value.trim(),
+      floorText: document.getElementById('f_floor').value.trim(),
+      direction: document.getElementById('f_direction').value,
+      confirmedDate: normalizeDate(document.getElementById('f_date').value),
+      brokerCount: document.getElementById('f_broker').value ? parseInt(document.getElementById('f_broker').value,10) : null,
+      tags: pendingTags.slice(),
+      link: document.getElementById('f_link').value.trim()
+    };
+    if (!entry.dong || !entry.priceRaw){ showResult(resultEl, '동과 가격은 필수 입력이에요.', 'info'); return; }
+    submitBtn.disabled = true;
+    try {
+      var added = await addOne(entry);
+      if (added){
+        await refreshData();
+        showResult(resultEl, entry.dong + ' 매물을 추가했어요.', 'ok');
+        e.target.reset();
+        pendingTags = [];
+        renderPendingTagsList();
+      } else {
+        showResult(resultEl, '이미 등록된 동일한 매물이 있어요.', 'info');
+      }
+    } catch (err){
+      showResult(resultEl, '추가 중 오류가 발생했어요: ' + (err && err.message ? err.message : err), 'info');
+    }
+    submitBtn.disabled = false;
+  });
+
+  document.getElementById('list').addEventListener('click', async function(e){
+    var btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    var action = btn.dataset.action;
+    var id = btn.dataset.id;
+
+    if (action === 'edit'){
+      if (state.editingId === id){
+        state.editingId = null; state.editingTags = null;
+      } else {
+        var item = state.items.find(function(i){ return i.id === id; });
+        state.editingId = id;
+        state.editingTags = (item && item.tags ? item.tags.slice() : []);
+      }
+      render();
+      return;
+    }
+    if (action === 'cancel-edit'){
+      state.editingId = null; state.editingTags = null;
+      render();
+      return;
+    }
+    if (action === 'edit-tag-add'){
+      var card1 = btn.closest('.card');
+      addEditTagFromInput(card1.querySelector('.e-tag-input'));
+      return;
+    }
+    if (action === 'edit-tag-remove'){
+      var tag = btn.dataset.tag;
+      if (state.editingTags) state.editingTags = state.editingTags.filter(function(t){ return t !== tag; });
+      render();
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      if (action === 'cycle-status'){
+        var target = state.items.find(function(i){ return i.id === id; });
+        var current = target ? (target.status || 'new') : 'new';
+        await gsCall('gsUpdateListing', id, { status: nextStatus(current) });
+        await refreshData();
+      } else if (action === 'toggle-tag'){
+        var tagItem = state.items.find(function(i){ return i.id === id; });
+        var currentTags = (tagItem && tagItem.highlightedTags) || [];
+        var tagName = btn.dataset.tag;
+        var nextTags = currentTags.indexOf(tagName) === -1
+          ? currentTags.concat([tagName])
+          : currentTags.filter(function(t){ return t !== tagName; });
+        await gsCall('gsUpdateListing', id, { highlightedTags: nextTags });
+        await refreshData();
+      } else if (action === 'save-edit'){
+        var card = btn.closest('.card');
+        var dong = card.querySelector('.e-dong').value.trim();
+        var priceRaw = card.querySelector('.e-price').value.trim();
+        if (!dong || !priceRaw){ alert('동과 가격은 필수 입력이에요.'); btn.disabled = false; return; }
+        var priced = parsePrice(priceRaw);
+        var latestPriceRaw = card.querySelector('.e-latest-price').value.trim();
+        var latestPriced = parsePrice(latestPriceRaw);
+        var brokerVal = card.querySelector('.e-broker').value;
+        await gsCall('gsUpdateListing', id, {
+          dong: dong, priceRaw: priceRaw, priceMin: priced.min, priceMax: priced.max,
+          latestPriceRaw: latestPriceRaw, latestPriceMin: latestPriced.min, latestPriceMax: latestPriced.max,
+          floorText: card.querySelector('.e-floor').value.trim(),
+          direction: card.querySelector('.e-direction').value,
+          confirmedDate: normalizeDate(card.querySelector('.e-date').value),
+          brokerCount: brokerVal ? parseInt(brokerVal,10) : null,
+          tags: (state.editingTags || []).slice(),
+          memo: card.querySelector('.e-memo').value.trim(),
+          link: card.querySelector('.e-link').value.trim()
+        });
+        state.editingId = null; state.editingTags = null;
+        await refreshData();
+      }
+    } catch (err){
+      alert('처리 중 오류가 발생했어요: ' + (err && err.message ? err.message : err));
+    }
+    btn.disabled = false;
+  });
+
+  document.getElementById('list').addEventListener('keydown', function(e){
+    if (e.target.classList && e.target.classList.contains('e-tag-input') && e.key === 'Enter' && !e.isComposing){
+      e.preventDefault();
+      addEditTagFromInput(e.target);
+    }
+  });
+
+  function renderDistribution(items){
+    var container = document.getElementById('distBody');
+    var withPrice = [];
+    items.forEach(function(it){
+      var v = repPrice(it);
+      if (v != null) withPrice.push({ it: it, v: v });
+    });
+    if (withPrice.length < 2){
+      container.innerHTML = '<p class="dist-empty">가격 정보가 있는 매물이 2건 이상이면 분포를 볼 수 있어요.</p>';
+      return;
+    }
+    var values = withPrice.map(function(x){ return x.v; });
+    var minV = Math.min.apply(null, values);
+    var maxV = Math.max.apply(null, values);
+    var binCount = (minV === maxV) ? 1 : 6;
+    var binSize = binCount > 1 ? (maxV - minV) / binCount : 0;
+    var bins = [];
+    for (var i=0; i<binCount; i++) bins.push({ count:0, ids:[] });
+    withPrice.forEach(function(x){
+      var idx = binCount > 1 ? Math.min(binCount - 1, Math.floor((x.v - minV) / binSize)) : 0;
+      bins[idx].count++;
+      bins[idx].ids.push(x.it.id);
+    });
+    var maxCount = Math.max.apply(null, bins.map(function(b){ return b.count; }));
+
+    var barsHtml = bins.map(function(b, idx){
+      var pct = maxCount > 0 ? Math.max(6, Math.round(b.count / maxCount * 100)) : 6;
+      return '<div class="dist-bar" data-idx="' + idx + '" style="height:' + pct + '%"></div>';
+    }).join('');
+
+    container.innerHTML =
+      '<div class="dist-chart">' +
+        '<div class="dist-callout" id="distCallout" hidden></div>' +
+        '<div class="dist-bars">' + barsHtml + '</div>' +
+      '</div>' +
+      '<div class="dist-labels"><span>' + formatManwon(minV) + '</span><span>' + formatManwon(maxV) + '</span></div>' +
+      '<div class="dist-footer"><span>가격분포</span><b>매매 ' + formatManwon(minV) + (maxV !== minV ? ' ~ ' + formatManwon(maxV) : '') + '</b></div>';
+
+    var calloutEl = container.querySelector('#distCallout');
+    var barEls = container.querySelectorAll('.dist-bar');
+    barEls.forEach(function(barEl){
+      var idx = parseInt(barEl.dataset.idx, 10);
+      var rangeText = binCount > 1
+        ? formatManwon(minV + idx * binSize) + ' ~ ' + formatManwon(minV + (idx + 1) * binSize)
+        : formatManwon(minV);
+      var leftPct = binCount > 1 ? ((idx + 0.5) / binCount * 100) : 50;
+      var count = bins[idx].count;
+
+      barEl.addEventListener('mouseenter', function(){
+        calloutEl.style.left = leftPct + '%';
+        calloutEl.innerHTML = rangeText + '<span class="count">(' + count + '개)</span>';
+        calloutEl.hidden = false;
+      });
+      barEl.addEventListener('mouseleave', function(){
+        calloutEl.hidden = true;
+      });
+      barEl.addEventListener('click', function(){
+        state.distFilter = { ids: bins[idx].ids.slice(), rangeText: rangeText };
+        render();
+      });
+    });
+  }
+
+  function render(){
+    var items = state.items.slice();
+    switch(state.sort){
+      case 'priceAsc': items.sort(function(a,b){ return (a.priceMin==null?Infinity:a.priceMin) - (b.priceMin==null?Infinity:b.priceMin); }); break;
+      case 'priceDesc': items.sort(function(a,b){ return (b.priceMax==null?-Infinity:b.priceMax) - (a.priceMax==null?-Infinity:a.priceMax); }); break;
+      case 'confirmedDesc': items.sort(function(a,b){ return (b.confirmedDate||'').localeCompare(a.confirmedDate||''); }); break;
+      case 'confirmedAsc': items.sort(function(a,b){ return (a.confirmedDate||'').localeCompare(b.confirmedDate||''); }); break;
+    }
+
+    var total = items.length;
+    var availableCount = items.filter(function(i){ return (i.status||'new') !== 'unavailable'; }).length;
+    var effMins = items.map(function(i){ return i.latestPriceMin != null ? i.latestPriceMin : i.priceMin; }).filter(function(v){ return v!=null; });
+    var effMaxs = items.map(function(i){ return i.latestPriceMax != null ? i.latestPriceMax : i.priceMax; }).filter(function(v){ return v!=null; });
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statAvailable').textContent = availableCount;
+    document.getElementById('statMin').textContent = effMins.length ? formatManwon(Math.min.apply(null,effMins)) : '-';
+    document.getElementById('statMax').textContent = effMaxs.length ? formatManwon(Math.max.apply(null,effMaxs)) : '-';
+
+    renderDistribution(items);
+
+    var filterBarEl = document.getElementById('listFilterBar');
+    var listItems = items;
+    if (state.distFilter){
+      var idSet = {};
+      state.distFilter.ids.forEach(function(id){ idSet[id] = true; });
+      listItems = items.filter(function(it){ return idSet[it.id]; });
+      filterBarEl.style.display = 'flex';
+      filterBarEl.innerHTML = '<span>가격 <b>' + escapeHtml(state.distFilter.rangeText) + '</b> 구간 매물 ' + listItems.length + '건 보는 중</span>' +
+        '<button type="button" class="icon-btn" id="clearDistFilterBtn">전체 매물 보기</button>';
+      document.getElementById('clearDistFilterBtn').addEventListener('click', function(){
+        state.distFilter = null;
+        render();
+      });
+    } else {
+      filterBarEl.style.display = 'none';
+      filterBarEl.innerHTML = '';
+    }
+
+    var listEl = document.getElementById('list');
+    if (!listItems.length){
+      listEl.innerHTML = '<div class="empty">' + (state.distFilter
+        ? '이 가격 구간에 해당하는 매물이 없어요.'
+        : '아직 등록된 매물이 없어요.<br>네이버 부동산에서 <b>구로두산 · 매매 · 66㎡</b> 매물 목록을 복사해 아래 붙여넣기 칸에 넣거나, 직접 입력해 보세요.') + '</div>';
+      return;
+    }
+    listEl.innerHTML = listItems.map(function(it){
+      if (it.id === state.editingId) return renderEditForm(it);
+
+      var status = it.status || 'new';
+      var metaBits = [];
+      if (it.floorText) metaBits.push(it.floorText);
+      if (it.direction) metaBits.push(it.direction);
+      if (it.confirmedDate) metaBits.push('확인 ' + it.confirmedDate);
+      if (it.brokerCount != null) metaBits.push('중개사 ' + it.brokerCount + '곳');
+
+      var hasLatest = (it.latestPriceMin != null || it.latestPriceMax != null);
+      var bigMin = hasLatest ? it.latestPriceMin : it.priceMin;
+      var bigMax = hasLatest ? it.latestPriceMax : it.priceMax;
+      var bigText = bigMin != null
+        ? formatManwon(bigMin) + (bigMax != null && bigMax !== bigMin ? ' ~ ' + formatManwon(bigMax) : '')
+        : escapeHtml(hasLatest ? it.latestPriceRaw : it.priceRaw);
+
+      var origMid = midOf(it.priceMin, it.priceMax);
+      var latestMid = hasLatest ? midOf(it.latestPriceMin, it.latestPriceMax) : null;
+      var arrowHtml = '';
+      if (hasLatest && origMid != null && latestMid != null && latestMid !== origMid){
+        arrowHtml = latestMid > origMid
+          ? '<span class="price-arrow up">▲</span>'
+          : '<span class="price-arrow down">▼</span>';
+      }
+
+      var tagsHtml = (it.tags && it.tags.length)
+        ? it.tags.map(function(t){
+            var isActive = (it.highlightedTags || []).indexOf(t) !== -1;
+            return '<button type="button" class="tag-pill' + (isActive ? ' active' : '') + '" data-action="toggle-tag" data-id="' + it.id + '" data-tag="' + escapeHtml(t) + '">' + escapeHtml(t) + '</button>';
+          }).join('')
+        : '';
+
+      var floorNumMatch = (it.floorText || '').match(/^(\d+)/);
+      var titleText = it.dong + (floorNumMatch ? ' ' + floorNumMatch[1] + '층' : '');
+
+      return '' +
+        '<div class="card">' +
+          '<div class="main">' +
+            '<div class="row1"><span class="dong">' + escapeHtml(titleText) + '</span>' +
+              (it.link ? '<a class="link-chip" href="' + escapeHtml(it.link) + '" target="_blank" rel="noopener noreferrer">🔗 링크</a>' : '') +
+              tagsHtml +
+              '</div>' +
+            '<div class="meta">' + metaBits.map(function(b){ return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
+            (it.memo ? '<div class="note">' + escapeHtml(it.memo) + '</div>' : '') +
+          '</div>' +
+          '<div class="price">' +
+            '<div class="amount">' + arrowHtml + '<span>' + bigText + '</span></div>' +
+            '<div class="raw">' + escapeHtml(it.priceRaw) + '</div>' +
+          '</div>' +
+          '<div class="actions">' +
+            '<button class="status-btn status-' + status + '" data-action="cycle-status" data-id="' + it.id + '">' + STATUS_LABEL[status] + '</button>' +
+            '<button class="icon-btn" data-action="edit" data-id="' + it.id + '">편집</button>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function directionOptionsHtml(current){
+    var html = '<option value="">선택 안 함</option>';
+    DIRECTIONS.forEach(function(d){
+      html += '<option' + (d === current ? ' selected' : '') + '>' + d + '</option>';
+    });
+    return html;
+  }
+
+  function renderEditForm(it){
+    var tagsHtml = (state.editingTags || []).map(function(t){
+      return '<span class="tag-chip">' + escapeHtml(t) + '<button type="button" data-action="edit-tag-remove" data-tag="' + escapeHtml(t) + '">×</button></span>';
+    }).join('');
+
+    return '' +
+      '<div class="card is-editing">' +
+        '<div class="edit-form">' +
+          '<div class="form-grid">' +
+            '<div><label>동</label><input type="text" class="e-dong" value="' + escapeHtml(it.dong) + '"></div>' +
+            '<div><label>가격</label><input type="text" class="e-price" value="' + escapeHtml(it.priceRaw) + '"></div>' +
+            '<div><label>층</label><input type="text" class="e-floor" value="' + escapeHtml(it.floorText || '') + '"></div>' +
+            '<div><label>최근가격</label><input type="text" class="e-latest-price" placeholder="예: 7억 6,000" value="' + escapeHtml(it.latestPriceRaw || '') + '"></div>' +
+            '<div><label>방향</label><select class="e-direction">' + directionOptionsHtml(it.direction) + '</select></div>' +
+            '<div><label>확인일자</label><input type="date" class="e-date" value="' + escapeHtml((it.confirmedDate || '').replace(/\./g,'-')) + '"></div>' +
+            '<div><label>등록 중개사 수</label><input type="number" min="0" class="e-broker" value="' + (it.brokerCount != null ? it.brokerCount : '') + '"></div>' +
+            '<div class="full">' +
+              '<label>태그</label>' +
+              '<div class="tag-input-row">' +
+                '<input type="text" class="e-tag-input" placeholder="태그 입력 후 Enter">' +
+                '<button type="button" class="icon-btn" data-action="edit-tag-add">추가</button>' +
+              '</div>' +
+              '<div class="tag-list">' + tagsHtml + '</div>' +
+            '</div>' +
+            '<div class="full"><label>메모</label><input type="text" class="e-memo" value="' + escapeHtml(it.memo || '') + '"></div>' +
+            '<div class="full"><label>링크</label><input type="text" class="e-link" placeholder="https://..." value="' + escapeHtml(it.link || '') + '"></div>' +
+          '</div>' +
+          '<div class="btn-row">' +
+            '<button type="button" class="btn-primary" data-action="save-edit" data-id="' + it.id + '">저장</button>' +
+            '<button type="button" class="icon-btn" data-action="cancel-edit">취소</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+
+  async function boot(){
+    await refreshData();
+    setInterval(function(){
+      if (!state.editingId && !document.hidden) refreshData();
+    }, 30000);
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
