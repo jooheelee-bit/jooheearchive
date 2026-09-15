@@ -942,9 +942,11 @@
     var barEls = container.querySelectorAll('.dist-bar');
 
     function rangeTextOf(idx){
-      return binCount > 1
-        ? formatManwon(minV + idx * binSize) + ' ~ ' + formatManwon(minV + (idx + 1) * binSize)
-        : formatManwon(minV);
+      if (binCount <= 1) return formatManwon(minV);
+      var lower = minV + idx * binSize;
+      var upper = minV + (idx + 1) * binSize - 50;
+      if (upper < lower) upper = lower;
+      return formatManwon(lower) + ' ~ ' + formatManwon(upper);
     }
     function leftPctOf(idx){
       return binCount > 1 ? ((idx + 0.5) / binCount * 100) : 50;
