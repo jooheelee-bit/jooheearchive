@@ -716,6 +716,9 @@
     var resultEl = document.getElementById('linkResult');
     if (!url){ showResult(resultEl, '링크를 입력해주세요.', 'info'); return; }
     var btn = this; btn.disabled = true;
+    var originalLabel = btn.textContent;
+    btn.textContent = '불러오는 중…';
+    showResult(resultEl, '링크를 확인하고 있어요. 사이트 응답에 따라 최대 1분 정도 걸릴 수 있어요.', 'info');
     try {
       var entry = await gsCall('gsFetchListingFromLink', url);
       document.getElementById('f_dong').value = entry.dong || '';
@@ -732,6 +735,7 @@
     } catch (err){
       showResult(resultEl, '정보를 가져오지 못했어요: ' + (err && err.message ? err.message : err), 'info');
     }
+    btn.textContent = originalLabel;
     btn.disabled = false;
   });
 
