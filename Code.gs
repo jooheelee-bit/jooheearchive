@@ -1,5 +1,5 @@
 /**
- * 구로두산 매매 트래커 — Google Apps Script 버전
+ * 매매 트래커 — Google Apps Script 버전
  *
  * 사용 방법:
  * 1. 새 Google Sheet를 만들고 확장 프로그램 > Apps Script를 엽니다.
@@ -13,7 +13,7 @@
  *    - 액세스 권한이 있는 사용자: 모든 사용자
  *    배포 후 나오는 URL이 "링크가 있는 모든 사람"에게 공유 가능한 주소입니다.
  * 6. (선택) 함수 선택을 "setupDailyTrigger"로 바꾸고 한 번 실행하면
- *    매일 오전 9시(한국시간)에 KB시세를 자동으로 새로고침합니다.
+ *    매일 오전 9시(한국시간)에 등록된 모든 단지의 KB시세를 자동으로 새로고침합니다.
  */
 
 var LISTINGS_SHEET_NAME = 'Listings';
@@ -25,30 +25,60 @@ var COLUMNS = [
   'tags', 'highlightedTags', 'link', 'memo', 'status', 'createdAt', 'updatedAt'
 ];
 
+/**
+ * 페이지 우측 상단의 단지 선택 버튼에 표시되는 단지 목록입니다.
+ * 단지를 추가하려면 이 배열에 항목을 추가하세요. 첫 번째 항목(gurodusan)은
+ * 기존에 쓰던 시트 이름(Listings/Meta)을 그대로 사용하는 기본 단지입니다.
+ */
+var COMPLEXES = [
+  { id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(전용44.64)', areaMatch: '66', exampleArea: '66㎡ (전용44.64)', kbUrl: 'https://kbland.kr/se/c/766' },
+  { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaLabel: '매매 · 전용 56.66㎡(전용40.95)', areaMatch: '56.66', exampleArea: '56.66㎡ (전용40.95)', kbUrl: 'https://kbland.kr/se/c/42671' },
+  { id: 'byeoksanlivepark', name: '벽산라이브파크', areaLabel: '매매 · 전용 102.49㎡(전용84.89)', areaMatch: '102.49', exampleArea: '102.49㎡ (전용84.89)', kbUrl: 'https://kbland.kr/se/c/422' }
+];
+var DEFAULT_COMPLEX_ID = COMPLEXES[0].id;
+
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('구로두산 매매 트래커')
+    .setTitle('매매 트래커')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/* ---------- 단지 helpers ---------- */
+
+function complexById_(complexId) {
+  var found = null;
+  COMPLEXES.forEach(function (c) { if (c.id === complexId) found = c; });
+  return found || COMPLEXES[0];
+}
+
+function listingsSheetName_(complexId) {
+  return complexId === DEFAULT_COMPLEX_ID ? LISTINGS_SHEET_NAME : (LISTINGS_SHEET_NAME + '_' + complexId);
+}
+
+function metaSheetName_(complexId) {
+  return complexId === DEFAULT_COMPLEX_ID ? META_SHEET_NAME : (META_SHEET_NAME + '_' + complexId);
 }
 
 /* ---------- sheet helpers ---------- */
 
-function getListingsSheet_() {
+function getListingsSheet_(complexId) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName(LISTINGS_SHEET_NAME);
+  var name = listingsSheetName_(complexId);
+  var sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = ss.insertSheet(LISTINGS_SHEET_NAME);
+    sh = ss.insertSheet(name);
     sh.appendRow(COLUMNS);
     sh.setFrozenRows(1);
   }
   return sh;
 }
 
-function getMetaSheet_() {
+function getMetaSheet_(complexId) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName(META_SHEET_NAME);
+  var name = metaSheetName_(complexId);
+  var sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = ss.insertSheet(META_SHEET_NAME);
+    sh = ss.insertSheet(name);
     sh.appendRow(['key', 'value']);
     sh.setFrozenRows(1);
   }
@@ -103,8 +133,8 @@ function objectToRow_(obj) {
   ];
 }
 
-function readAllListings_() {
-  var sh = getListingsSheet_();
+function readAllListings_(complexId) {
+  var sh = getListingsSheet_(complexId);
   var lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
   var values = sh.getRange(2, 1, lastRow - 1, COLUMNS.length).getValues();
@@ -125,8 +155,8 @@ function keyOf_(dong, floorText, priceRaw) {
   return [dong, floorText, priceRaw].join('__');
 }
 
-function readKbPrice_() {
-  var sh = getMetaSheet_();
+function readKbPrice_(complexId) {
+  var sh = getMetaSheet_(complexId);
   var lastRow = sh.getLastRow();
   var obj = {};
   if (lastRow >= 2) {
@@ -144,8 +174,8 @@ function readKbPrice_() {
   };
 }
 
-function writeKbPrice_(kb) {
-  var sh = getMetaSheet_();
+function writeKbPrice_(complexId, kb) {
+  var sh = getMetaSheet_(complexId);
   sh.clearContents();
   sh.appendRow(['key', 'value']);
   Object.keys(kb).forEach(function (k) { sh.appendRow([k, kb[k]]); });
@@ -153,13 +183,19 @@ function writeKbPrice_(kb) {
 
 /* ---------- client-callable functions ---------- */
 
-function gsGetData() {
-  return { listings: readAllListings_(), kbPrice: readKbPrice_() };
+function gsGetComplexes() {
+  return COMPLEXES.map(function (c) {
+    return { id: c.id, name: c.name, areaLabel: c.areaLabel, areaMatch: c.areaMatch, exampleArea: c.exampleArea };
+  });
 }
 
-function gsAddListing(entry) {
-  var sh = getListingsSheet_();
-  var existing = readAllListings_();
+function gsGetData(complexId) {
+  return { listings: readAllListings_(complexId), kbPrice: readKbPrice_(complexId) };
+}
+
+function gsAddListing(complexId, entry) {
+  var sh = getListingsSheet_(complexId);
+  var existing = readAllListings_(complexId);
   var key = keyOf_(entry.dong, entry.floorText, entry.priceRaw);
   var dup = existing.some(function (it) {
     return keyOf_(it.dong, it.floorText, it.priceRaw) === key;
@@ -180,9 +216,9 @@ function gsAddListing(entry) {
   return { added: true, item: obj };
 }
 
-function gsAddListingsBulk(entries) {
-  var sh = getListingsSheet_();
-  var existing = readAllListings_();
+function gsAddListingsBulk(complexId, entries) {
+  var sh = getListingsSheet_(complexId);
+  var existing = readAllListings_(complexId);
   var existingKeys = {};
   existing.forEach(function (it) { existingKeys[keyOf_(it.dong, it.floorText, it.priceRaw)] = true; });
 
@@ -207,8 +243,8 @@ function gsAddListingsBulk(entries) {
   return { added: added, skipped: skipped, newOnes: newOnes };
 }
 
-function gsUpdateListing(id, patch) {
-  var sh = getListingsSheet_();
+function gsUpdateListing(complexId, id, patch) {
+  var sh = getListingsSheet_(complexId);
   var rowIdx = findRowIndexById_(sh, id);
   if (rowIdx === -1) return { ok: false };
   var row = sh.getRange(rowIdx, 1, 1, COLUMNS.length).getValues()[0];
@@ -244,8 +280,9 @@ function normalizeKbDate_(s) {
   return y + '.' + m + '.' + d;
 }
 
-function gsRefreshKbPrice() {
-  var res = UrlFetchApp.fetch('https://kbland.kr/se/c/766', { muteHttpExceptions: true });
+function gsRefreshKbPrice(complexId) {
+  var complex = complexById_(complexId);
+  var res = UrlFetchApp.fetch(complex.kbUrl, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) {
     throw new Error('kbland.kr 응답 오류 (코드 ' + res.getResponseCode() + ')');
   }
@@ -266,17 +303,32 @@ function gsRefreshKbPrice() {
     dealFloor: dealParts[1] || '',
     fetchedAt: new Date().toISOString()
   };
-  writeKbPrice_(kb);
+  writeKbPrice_(complex.id, kb);
   return kb;
 }
 
 /* ---------- 일회성 유틸리티 (Apps Script 편집기에서 직접 실행) ---------- */
 
+/**
+ * 등록된 모든 단지의 KB시세를 순서대로 새로고침합니다.
+ * 한 단지에서 오류가 나도 나머지 단지는 계속 새로고침을 시도합니다.
+ */
+function refreshAllKbPrices() {
+  COMPLEXES.forEach(function (c) {
+    try {
+      gsRefreshKbPrice(c.id);
+    } catch (e) {
+      Logger.log(c.name + ' KB시세 새로고침 실패: ' + e.message);
+    }
+  });
+}
+
 function setupDailyTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'gsRefreshKbPrice') ScriptApp.deleteTrigger(t);
+    var fn = t.getHandlerFunction();
+    if (fn === 'gsRefreshKbPrice' || fn === 'refreshAllKbPrices') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('gsRefreshKbPrice')
+  ScriptApp.newTrigger('refreshAllKbPrices')
     .timeBased()
     .everyDays(1)
     .atHour(9)
@@ -287,15 +339,16 @@ function setupDailyTrigger() {
 /**
  * Claude 아티팩트에 저장돼 있던 기존 매물 데이터를 그대로 옮겨 심습니다.
  * Apps Script 편집기에서 이 함수를 한 번만 실행하세요 (이미 데이터가 있으면 덮어씁니다).
+ * 구로두산(기본 단지) 데이터만 채웁니다.
  */
 function seedData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var old = ss.getSheetByName(LISTINGS_SHEET_NAME);
+  var old = ss.getSheetByName(listingsSheetName_(DEFAULT_COMPLEX_ID));
   if (old) ss.deleteSheet(old);
-  var oldMeta = ss.getSheetByName(META_SHEET_NAME);
+  var oldMeta = ss.getSheetByName(metaSheetName_(DEFAULT_COMPLEX_ID));
   if (oldMeta) ss.deleteSheet(oldMeta);
 
-  var sh = getListingsSheet_();
+  var sh = getListingsSheet_(DEFAULT_COMPLEX_ID);
   var seedListings = [
     { id: '1j1ob6pwukk2iec943k9', dong: '103동', floorText: '25/25층', direction: '북동향', priceRaw: '7억 3,000', priceMin: 73000, priceMax: 73000, latestPriceRaw: '7억 2,000', latestPriceMin: 72000, latestPriceMax: 72000, confirmedDate: '2026.08.29', brokerCount: 10, tags: ['옛수리', '12월입주협의'], highlightedTags: [], link: 'https://naver.me/FetV0tXp', memo: '옛 수리', status: 'hold', createdAt: '2026-09-14T16:22:41.779Z', updatedAt: '2026-09-14T16:56:18.560Z' },
     { id: '3hxnyidi5bri7ajkilxp', dong: '101동', floorText: '19/25층', direction: '남동향', priceRaw: '7억 6,000', priceMin: 76000, priceMax: 76000, latestPriceRaw: '', latestPriceMin: null, latestPriceMax: null, confirmedDate: '2026.08.31', brokerCount: 4, tags: ['올수리', '12월입주협의'], highlightedTags: [], link: 'https://naver.me/F5spVFdz', memo: '샷시 , 중문, 욕실 포함 최근 올수리', status: 'hold', createdAt: '2026-09-14T16:11:59.953Z', updatedAt: '2026-09-14T17:07:15.251Z' },
@@ -309,7 +362,7 @@ function seedData() {
   ];
   seedListings.forEach(function (obj) { sh.appendRow(objectToRow_(obj)); });
 
-  writeKbPrice_({
+  writeKbPrice_(DEFAULT_COMPLEX_ID, {
     generalPrice: '6억 8,000',
     generalDate: '2026.09.11',
     dealPrice: '7억 1,500',

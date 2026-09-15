@@ -4,7 +4,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<title>구로두산 매매 트래커</title>
+<title>매매 트래커</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Gothic+A1:wght@400;500;700&display=swap">
 <style>
@@ -71,6 +71,10 @@
   .header h1{ font-size:26px; font-weight:700; margin:0 0 4px; text-wrap:balance; }
   .header .subtitle{ font-size:14px; color:var(--text-muted); margin:0; }
   .header .subtitle b{ color:var(--text); font-weight:600; }
+  .complex-select{
+    font:inherit; font-size:13px; font-weight:700; padding:8px 14px; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; flex:none;
+  }
 
   /* stats */
   .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
@@ -253,9 +257,10 @@
 <div class="wrap">
   <div class="header">
     <div>
-      <h1>구로두산</h1>
-      <p class="subtitle">매매 · 전용 <b>66㎡</b>(전용44.64) 매물 트래커</p>
+      <h1 id="complexTitle">구로두산</h1>
+      <p class="subtitle" id="complexSubtitle">매매 · 전용 66㎡(전용44.64) 매물 트래커</p>
     </div>
+    <select id="complexSelect" class="complex-select" aria-label="단지 선택"></select>
   </div>
 
   <div id="loadBanner" class="load-banner">불러오는 중…</div>
@@ -280,7 +285,7 @@
   <div class="distribution">
     <div class="dist-header">
       <h2>매물 분포</h2>
-      <span class="dist-sub">전용 66㎡ · 매매</span>
+      <span class="dist-sub" id="distSub">전용 66㎡ · 매매</span>
     </div>
     <div id="distBody"></div>
   </div>
@@ -303,10 +308,10 @@
     </div>
 
     <div class="panel active" data-panel="paste">
-      <p class="hint">네이버 부동산에서 <b>매매 · 66㎡</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.</p>
+      <p class="hint" id="pasteHint">네이버 부동산에서 <b>매매 · 66㎡</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.</p>
       <details class="example">
         <summary>붙여넣기 예시 형식 보기</summary>
-        <pre>구로두산 103동
+        <pre id="pasteExample">구로두산 103동
 매매 7억 2,000 ~ 7억 3,000
 아파트 | 66㎡ (전용44.64) | 25/25층 | 북동향
 집주인 확인매물 2026.09.14
@@ -377,8 +382,19 @@
 
 <script>
 (function(){
-  var state = { items: [], sort: 'priceAsc', editingId: null, editingTags: null, distFilter: null, kbPrice: null };
+  var state = {
+    items: [], sort: 'priceAsc', editingId: null, editingTags: null, distFilter: null, kbPrice: null,
+    complexId: null, complexes: []
+  };
   var pendingTags = [];
+  var COMPLEX_STORAGE_KEY = 'realEstateTracker.lastComplexId';
+
+  function getStoredComplexId(){
+    try { return localStorage.getItem(COMPLEX_STORAGE_KEY) || null; } catch (e){ return null; }
+  }
+  function storeComplexId(id){
+    try { localStorage.setItem(COMPLEX_STORAGE_KEY, id); } catch (e){}
+  }
 
   var DIRECTIONS = ['남향','남동향','남서향','동향','서향','북향','북동향','북서향'];
 
@@ -451,7 +467,7 @@
 
   function keyOf(it){ return [it.dong, it.floorText, it.priceRaw].join('__'); }
 
-  function parseBulkText(raw){
+  function parseBulkText(raw, areaMatch){
     var lines = raw.split('\n').map(function(l){ return l.trim(); });
     var entries = [];
     for (var i=0;i<lines.length;i++){
@@ -485,7 +501,7 @@
           if (bm) brokerCount = parseInt(bm[1],10);
         }
       }
-      if (area && area.indexOf('66') === -1) continue;
+      if (areaMatch && area && area.indexOf(areaMatch) === -1) continue;
       entries.push({
         dong: dong || '동 미상', priceRaw: priceRaw, floorText: floorText,
         direction: direction, confirmedDate: confirmedDate, brokerCount: brokerCount, link: ''
@@ -496,7 +512,7 @@
 
   async function refreshData(){
     try {
-      var data = await gsCall('gsGetData');
+      var data = await gsCall('gsGetData', state.complexId);
       state.items = data.listings || [];
       state.kbPrice = data.kbPrice || null;
       var banner = document.getElementById('loadBanner');
@@ -512,7 +528,7 @@
   async function addOne(entry){
     var priced = parsePrice(entry.priceRaw);
     var latestPriced = parsePrice(entry.latestPriceRaw || '');
-    var res = await gsCall('gsAddListing', {
+    var res = await gsCall('gsAddListing', state.complexId, {
       dong: entry.dong, priceRaw: entry.priceRaw, priceMin: priced.min, priceMax: priced.max,
       latestPriceRaw: entry.latestPriceRaw || '', latestPriceMin: latestPriced.min, latestPriceMax: latestPriced.max,
       floorText: entry.floorText || '', direction: entry.direction || '',
@@ -531,7 +547,7 @@
         confirmedDate: entry.confirmedDate || '', brokerCount: (entry.brokerCount != null ? entry.brokerCount : null)
       };
     });
-    var res = await gsCall('gsAddListingsBulk', payload);
+    var res = await gsCall('gsAddListingsBulk', state.complexId, payload);
     return res;
   }
 
@@ -584,7 +600,7 @@
     var btn = this; btn.disabled = true;
     var msgEl = document.getElementById('kbRefreshMsg');
     try {
-      var kb = await gsCall('gsRefreshKbPrice');
+      var kb = await gsCall('gsRefreshKbPrice', state.complexId);
       state.kbPrice = kb;
       renderKbPrice();
       showResult(msgEl, 'KB부동산에서 최신 시세를 가져왔어요.', 'ok');
@@ -632,7 +648,8 @@
     var raw = document.getElementById('pasteInput').value;
     var resultEl = document.getElementById('pasteResult');
     if (!raw.trim()){ showResult(resultEl, '붙여넣은 내용이 없어요.', 'info'); return; }
-    var entries = parseBulkText(raw);
+    var currentComplex = state.complexes.find(function(c){ return c.id === state.complexId; });
+    var entries = parseBulkText(raw, currentComplex && currentComplex.areaMatch);
     if (!entries.length){ showResult(resultEl, '매물을 인식하지 못했어요. 예시 형식을 확인해 주세요.', 'info'); return; }
     var btn = this; btn.disabled = true;
     try {
@@ -723,7 +740,7 @@
       if (action === 'cycle-status'){
         var target = state.items.find(function(i){ return i.id === id; });
         var current = target ? (target.status || 'new') : 'new';
-        await gsCall('gsUpdateListing', id, { status: nextStatus(current) });
+        await gsCall('gsUpdateListing', state.complexId, id, { status: nextStatus(current) });
         await refreshData();
       } else if (action === 'toggle-tag'){
         var tagItem = state.items.find(function(i){ return i.id === id; });
@@ -732,7 +749,7 @@
         var nextTags = currentTags.indexOf(tagName) === -1
           ? currentTags.concat([tagName])
           : currentTags.filter(function(t){ return t !== tagName; });
-        await gsCall('gsUpdateListing', id, { highlightedTags: nextTags });
+        await gsCall('gsUpdateListing', state.complexId, id, { highlightedTags: nextTags });
         await refreshData();
       } else if (action === 'save-edit'){
         var card = btn.closest('.card');
@@ -743,7 +760,7 @@
         var latestPriceRaw = card.querySelector('.e-latest-price').value.trim();
         var latestPriced = parsePrice(latestPriceRaw);
         var brokerVal = card.querySelector('.e-broker').value;
-        await gsCall('gsUpdateListing', id, {
+        await gsCall('gsUpdateListing', state.complexId, id, {
           dong: dong, priceRaw: priceRaw, priceMin: priced.min, priceMax: priced.max,
           latestPriceRaw: latestPriceRaw, latestPriceMin: latestPriced.min, latestPriceMax: latestPriced.max,
           floorText: card.querySelector('.e-floor').value.trim(),
@@ -891,9 +908,11 @@
 
     var listEl = document.getElementById('list');
     if (!listItems.length){
+      var currentComplex = state.complexes.find(function(c){ return c.id === state.complexId; });
+      var complexLabel = currentComplex ? (currentComplex.name + ' · ' + currentComplex.areaLabel) : '매매';
       listEl.innerHTML = '<div class="empty">' + (state.distFilter
         ? '이 가격 구간에 해당하는 매물이 없어요.'
-        : '아직 등록된 매물이 없어요.<br>네이버 부동산에서 <b>구로두산 · 매매 · 66㎡</b> 매물 목록을 복사해 아래 붙여넣기 칸에 넣거나, 직접 입력해 보세요.') + '</div>';
+        : '아직 등록된 매물이 없어요.<br>네이버 부동산에서 <b>' + escapeHtml(complexLabel) + '</b> 매물 목록을 복사해 아래 붙여넣기 칸에 넣거나, 직접 입력해 보세요.') + '</div>';
       return;
     }
     listEl.innerHTML = listItems.map(function(it){
@@ -1003,7 +1022,69 @@
     });
   }
 
+  function currentComplex(){
+    return state.complexes.find(function(c){ return c.id === state.complexId; }) || null;
+  }
+
+  function populateComplexSelect(){
+    var sel = document.getElementById('complexSelect');
+    sel.innerHTML = state.complexes.map(function(c){
+      return '<option value="' + escapeHtml(c.id) + '"' + (c.id === state.complexId ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+    }).join('');
+  }
+
+  function renderComplexTexts(){
+    var complex = currentComplex();
+    var titleEl = document.getElementById('complexTitle');
+    var subtitleEl = document.getElementById('complexSubtitle');
+    var hintEl = document.getElementById('pasteHint');
+    var exampleEl = document.getElementById('pasteExample');
+    var distSubEl = document.getElementById('distSub');
+    if (!complex) return;
+
+    if (titleEl) titleEl.textContent = complex.name;
+    if (subtitleEl) subtitleEl.textContent = (complex.areaLabel || '') + ' 매물 트래커';
+    if (distSubEl) distSubEl.textContent = complex.areaLabel || '';
+    if (hintEl){
+      hintEl.innerHTML = '네이버 부동산에서 <b>' + escapeHtml(complex.areaLabel || '') + '</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.';
+    }
+    if (exampleEl){
+      var areaText = complex.exampleArea || '';
+      exampleEl.textContent = complex.name + ' 103동\n매매 7억 2,000 ~ 7억 3,000\n아파트 | ' + areaText + ' | 25/25층 | 북동향\n집주인 확인매물 2026.09.14\n중개사 10곳에서 등록했어요';
+    }
+  }
+
+  async function switchComplex(newId){
+    if (!newId || newId === state.complexId) return;
+    state.complexId = newId;
+    storeComplexId(newId);
+    state.editingId = null; state.editingTags = null; state.distFilter = null;
+    state.items = []; state.kbPrice = null;
+    renderComplexTexts();
+    render();
+    renderKbPrice();
+    await refreshData();
+  }
+
+  document.getElementById('complexSelect').addEventListener('change', function(){
+    switchComplex(this.value);
+  });
+
   async function boot(){
+    try {
+      state.complexes = await gsCall('gsGetComplexes');
+    } catch (err){
+      state.complexes = [];
+    }
+    if (!state.complexes.length){
+      state.complexes = [{ id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(전용44.64)', areaMatch: '66', exampleArea: '66㎡ (전용44.64)' }];
+    }
+    var stored = getStoredComplexId();
+    var initial = state.complexes.find(function(c){ return c.id === stored; });
+    state.complexId = (initial || state.complexes[0]).id;
+
+    populateComplexSelect();
+    renderComplexTexts();
     await refreshData();
     setInterval(function(){
       if (!state.editingId && !document.hidden) refreshData();
