@@ -101,6 +101,8 @@
   .stat-tile .label{ font-size:12px; color:var(--text-muted); margin-bottom:4px; }
   .stat-tile .value{ font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; font-family:'IBM Plex Sans KR',sans-serif; }
   .stat-tile.available .value{ color:var(--primary); }
+  .stat-tile-clickable{ cursor:pointer; text-align:left; font:inherit; margin:0; appearance:none; -webkit-appearance:none; }
+  .stat-tile-clickable.active{ border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary); }
 
   /* KB 시세 */
   .kb-price{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:18px; }
@@ -174,14 +176,17 @@
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     padding:14px 16px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow);
   }
+  .card.card-status-new{ border-color:var(--status-new); }
+  .card.card-status-interested{ border-color:var(--status-interested); }
+  .card.card-status-unavailable{ background:var(--surface-2); }
   .card .main{ flex:1; min-width:0; }
   .card .row1{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
   .card .dong{ font-family:'IBM Plex Sans KR',sans-serif; font-weight:700; font-size:15px; margin-right:2px; }
   .link-chip{
-    font-size:11px; font-weight:600; color:var(--text-muted); background:var(--surface-2); border:1px solid var(--border);
+    font-size:11px; font-weight:600; color:var(--text); background:var(--surface); border:1px solid var(--border);
     padding:2px 8px; border-radius:999px; text-decoration:none; flex:none; white-space:nowrap;
   }
-  .link-chip:hover{ color:var(--text); border-color:var(--text-muted); }
+  .link-chip:hover{ background:var(--surface-2); }
   .tag-pill{
     font:inherit; font-size:11px; font-weight:600; color:var(--text-muted); background:var(--surface-2); border:none;
     padding:2px 8px; border-radius:999px; white-space:nowrap; cursor:pointer;
@@ -334,8 +339,8 @@
   <div id="loadBanner" class="load-banner">불러오는 중…</div>
 
   <div class="stats">
-    <div class="stat-tile"><div class="label">전체 매물</div><div class="value" id="statTotal">0</div></div>
-    <div class="stat-tile available"><div class="label">가능 매물</div><div class="value" id="statAvailable">0</div></div>
+    <button type="button" class="stat-tile available stat-tile-clickable" id="statAvailableTile" data-availability="available"><div class="label">가능 매물</div><div class="value" id="statAvailable">0</div></button>
+    <button type="button" class="stat-tile stat-tile-clickable" id="statTotalTile" data-availability="all"><div class="label">전체 매물</div><div class="value" id="statTotal">0</div></button>
     <div class="stat-tile"><div class="label">최저가</div><div class="value" id="statMin">-</div></div>
     <div class="stat-tile"><div class="label">최고가</div><div class="value" id="statMax">-</div></div>
   </div>
@@ -408,12 +413,12 @@
     </div>
 
     <div class="panel active" data-panel="paste">
-      <p class="hint" id="pasteHint">네이버 부동산에서 <b>매매 · 66㎡</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.</p>
+      <p class="hint" id="pasteHint">네이버 부동산에서 <b>매매 · 전용 66㎡(20평)</b>로 필터링한 매물 목록을 드래그해 복사(⌘/Ctrl+C)한 다음 아래에 붙여넣고 버튼을 누르세요. 이미 등록된 매물은 건너뛰고, 새로운 매물만 <span style="color:var(--new); font-weight:700;">신규</span>로 추가돼요.</p>
       <details class="example">
         <summary>붙여넣기 예시 형식 보기</summary>
         <pre id="pasteExample">구로두산 103동
 매매 7억 2,000 ~ 7억 3,000
-아파트 | 66㎡ (전용44.64) | 25/25층 | 북동향
+아파트 | 66㎡ | 25/25층 | 북동향
 집주인 확인매물 2026.09.14
 중개사 10곳에서 등록했어요</pre>
       </details>
@@ -488,7 +493,7 @@
 (function(){
   var state = {
     items: [], sort: 'priceAsc', editingId: null, editingTags: null, distFilter: null, kbPrice: null,
-    complexId: null, complexes: [], dongFilter: '', floorFilter: ''
+    complexId: null, complexes: [], dongFilter: '', floorFilter: '', availabilityFilter: 'all'
   };
   var pendingTags = [];
   var COMPLEX_STORAGE_KEY = 'realEstateTracker.lastComplexId';
@@ -712,6 +717,13 @@
       document.querySelectorAll('.sort-btn').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
       btn.setAttribute('aria-pressed','true');
       state.sort = btn.dataset.sort;
+      render();
+    });
+  });
+
+  document.querySelectorAll('.stat-tile-clickable').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      state.availabilityFilter = btn.dataset.availability;
       render();
     });
   });
@@ -1140,11 +1152,18 @@
     document.getElementById('statMin').textContent = effMins.length ? formatManwon(Math.min.apply(null,effMins)) : '-';
     document.getElementById('statMax').textContent = effMaxs.length ? formatManwon(Math.max.apply(null,effMaxs)) : '-';
 
-    renderDistribution(items);
+    document.getElementById('statAvailableTile').classList.toggle('active', state.availabilityFilter === 'available');
+    document.getElementById('statTotalTile').classList.toggle('active', state.availabilityFilter === 'all');
+
+    var scopedItems = state.availabilityFilter === 'available'
+      ? items.filter(function(i){ return (i.status||'new') !== 'unavailable'; })
+      : items;
+
+    renderDistribution(scopedItems);
     populateFilterMenus(state.items);
 
     var filterBarEl = document.getElementById('listFilterBar');
-    var listItems = items;
+    var listItems = scopedItems;
     if (state.distFilter){
       var idSet = {};
       state.distFilter.ids.forEach(function(id){ idSet[id] = true; });
@@ -1217,7 +1236,7 @@
       var titleText = it.dong + (floorToken ? ' ' + floorToken + '층' : '');
 
       return '' +
-        '<div class="card">' +
+        '<div class="card card-status-' + status + '">' +
           '<div class="main">' +
             '<div class="row1"><span class="dong">' + escapeHtml(titleText) + '</span>' +
               (it.link ? '<a class="link-chip" href="' + escapeHtml(it.link) + '" target="_blank" rel="noopener noreferrer">🔗 링크</a>' : '') +
@@ -1403,7 +1422,7 @@
     state.complexId = newId;
     storeComplexId(newId);
     state.editingId = null; state.editingTags = null; state.distFilter = null;
-    state.dongFilter = ''; state.floorFilter = '';
+    state.dongFilter = ''; state.floorFilter = ''; state.availabilityFilter = 'all';
     state.items = []; state.kbPrice = null;
     populateComplexMenu();
     renderComplexTexts();
