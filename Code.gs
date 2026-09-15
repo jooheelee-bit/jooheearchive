@@ -443,6 +443,51 @@ function gsRefreshKbPrice(complexId) {
 /* ---------- 일회성 유틸리티 (Apps Script 편집기에서 직접 실행) ---------- */
 
 /**
+ * KB시세 오매칭 문제를 진단하기 위한 함수입니다.
+ * 한양수자인성남마크뷰 페이지에서 'KB시세 일반가' 라벨이 몇 번 등장하는지,
+ * 각 위치 주변에 어떤 텍스트(평형 정보 등)가 있는지를 실행 로그에 출력합니다.
+ *
+ * 사용법: Apps Script 편집기 상단 함수 선택을 "debugKbPriceBlocks"로 바꾸고
+ * ▶ 실행 → 왼쪽 "실행 로그" 또는 보기 > 실행 기록에서 출력된 내용을 복사해
+ * 공유해주세요. (라벨이 여러 번 나오는지, areaMatch 문자열 '56.66'이 어느
+ * 블록 근처에 있는지를 확인하기 위함입니다.)
+ */
+function debugKbPriceBlocks() {
+  var complex = complexById_('hanyangmarkview');
+  var res = UrlFetchApp.fetch(complex.kbUrl, {
+    muteHttpExceptions: true,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+    }
+  });
+  Logger.log('응답 코드: ' + res.getResponseCode());
+  var html = res.getContentText();
+  Logger.log('HTML 길이: ' + html.length);
+
+  var label = 'KB시세 일반가';
+  var idx = 0, count = 0;
+  while (count < 8) {
+    idx = html.indexOf('>' + label + '<', idx);
+    if (idx === -1) break;
+    count++;
+    var windowStart = Math.max(0, idx - 500);
+    var beforeText = htmlToPlainText_(html.slice(windowStart, idx));
+    var afterText = htmlToPlainText_(html.slice(idx, idx + 1000));
+    Logger.log('===== 매치 #' + count + ' (offset ' + idx + ') =====');
+    Logger.log('--- 앞쪽 문맥(최대 500자, 평형 정보 확인용) ---');
+    Logger.log(beforeText);
+    Logger.log('--- 라벨 이후 값(최대 1000자) ---');
+    Logger.log(afterText);
+    idx += label.length;
+  }
+  if (count === 0) {
+    Logger.log('라벨을 하나도 찾지 못했어요. 페이지 구조가 완전히 바뀌었을 수 있어요.');
+  } else {
+    Logger.log('총 ' + count + '개 매치 발견');
+  }
+}
+
+/**
  * 등록된 모든 단지의 KB시세를 순서대로 새로고침합니다.
  * 한 단지에서 오류가 나도 나머지 단지는 계속 새로고침을 시도합니다.
  */
