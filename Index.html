@@ -99,7 +99,7 @@
   .dist-chart{ position:relative; padding-top:44px; }
   .dist-bars{ display:flex; align-items:flex-end; gap:8px; height:96px; }
   .dist-bar{ flex:1; background:var(--surface-2); border-radius:6px 6px 2px 2px; min-height:6px; cursor:pointer; transition:background .1s; }
-  .dist-bar:hover, .dist-bar.hover{ background:var(--primary); }
+  .dist-bar:hover, .dist-bar.hover, .dist-bar.selected{ background:var(--primary); }
   .dist-callout{
     position:absolute; top:0; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border);
     border-radius:999px; padding:8px 14px; font-size:13px; font-weight:700; white-space:nowrap; box-shadow:var(--shadow);
@@ -795,9 +795,13 @@
     });
     var maxCount = Math.max.apply(null, bins.map(function(b){ return b.count; }));
 
+    var selectedIdx = (state.distFilter && typeof state.distFilter.binIdx === 'number' && state.distFilter.binIdx < bins.length)
+      ? state.distFilter.binIdx : null;
+
     var barsHtml = bins.map(function(b, idx){
       var pct = maxCount > 0 ? Math.max(6, Math.round(b.count / maxCount * 100)) : 6;
-      return '<div class="dist-bar" data-idx="' + idx + '" style="height:' + pct + '%"></div>';
+      var cls = 'dist-bar' + (idx === selectedIdx ? ' selected' : '');
+      return '<div class="' + cls + '" data-idx="' + idx + '" style="height:' + pct + '%"></div>';
     }).join('');
 
     container.innerHTML =
@@ -810,24 +814,38 @@
 
     var calloutEl = container.querySelector('#distCallout');
     var barEls = container.querySelectorAll('.dist-bar');
-    barEls.forEach(function(barEl){
-      var idx = parseInt(barEl.dataset.idx, 10);
-      var rangeText = binCount > 1
+
+    function rangeTextOf(idx){
+      return binCount > 1
         ? formatManwon(minV + idx * binSize) + ' ~ ' + formatManwon(minV + (idx + 1) * binSize)
         : formatManwon(minV);
-      var leftPct = binCount > 1 ? ((idx + 0.5) / binCount * 100) : 50;
-      var count = bins[idx].count;
+    }
+    function leftPctOf(idx){
+      return binCount > 1 ? ((idx + 0.5) / binCount * 100) : 50;
+    }
+    function showCallout(idx){
+      calloutEl.style.left = leftPctOf(idx) + '%';
+      calloutEl.innerHTML = rangeTextOf(idx) + '<span class="count">(' + bins[idx].count + '개)</span>';
+      calloutEl.hidden = false;
+    }
+    function restoreCallout(){
+      if (selectedIdx != null) showCallout(selectedIdx);
+      else calloutEl.hidden = true;
+    }
+
+    if (selectedIdx != null) showCallout(selectedIdx);
+
+    barEls.forEach(function(barEl){
+      var idx = parseInt(barEl.dataset.idx, 10);
 
       barEl.addEventListener('mouseenter', function(){
-        calloutEl.style.left = leftPct + '%';
-        calloutEl.innerHTML = rangeText + '<span class="count">(' + count + '개)</span>';
-        calloutEl.hidden = false;
+        showCallout(idx);
       });
       barEl.addEventListener('mouseleave', function(){
-        calloutEl.hidden = true;
+        restoreCallout();
       });
       barEl.addEventListener('click', function(){
-        state.distFilter = { ids: bins[idx].ids.slice(), rangeText: rangeText };
+        state.distFilter = { ids: bins[idx].ids.slice(), rangeText: rangeTextOf(idx), binIdx: idx };
         render();
       });
     });
