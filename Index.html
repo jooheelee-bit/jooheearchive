@@ -309,7 +309,7 @@
         </button>
         <div class="complex-menu" id="complexMenu" hidden></div>
       </div>
-      <button type="button" id="addComplexBtn" class="complex-switch-btn">+ 단지 추가</button>
+      <button type="button" id="addComplexBtn" class="complex-switch-btn">단지 추가</button>
     </div>
   </div>
 
@@ -1414,7 +1414,7 @@
       state.complexes = [];
     }
     if (!state.complexes.length){
-      state.complexes = [{ id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(~20평)', areaMatch: '66', exampleArea: '66㎡', hasKbLink: false }];
+      state.complexes = [{ id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(20평)', areaMatch: '66', exampleArea: '66㎡', hasKbLink: false }];
     }
     var stored = getStoredComplexId();
     var initial = state.complexes.find(function(c){ return c.id === stored; });

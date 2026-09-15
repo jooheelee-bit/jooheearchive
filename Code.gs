@@ -124,7 +124,7 @@ function pyeongOf_(areaSqm) {
 }
 
 function areaLabelOf_(areaSqm) {
-  return '매매 · 전용 ' + areaSqm + '㎡(~' + pyeongOf_(areaSqm) + '평)';
+  return '매매 · 전용 ' + areaSqm + '㎡(' + pyeongOf_(areaSqm) + '평)';
 }
 
 function complexViewOf_(c) {
