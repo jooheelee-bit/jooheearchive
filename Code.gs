@@ -309,10 +309,32 @@ function gsAddComplex(name, areaSqm) {
  * 추가한 단지든 동일하게 동작합니다. API 방식(kbComplexNo/kbAreaNo)이 아니라
  * 페이지 전체를 가져와 추출하는 방식으로 전환됩니다.
  */
+/**
+ * 사용자가 붙여넣은 링크가 kbland.kr의 실제 시세 API(BasePrcInfoNew) 주소면
+ * 단지기본일련번호/면적일련번호를 뽑아냅니다. 평형이 여러 개인 단지도 이
+ * 링크를 쓰면 항상 정확한 평형만 가져올 수 있어요(브라우저 개발자도구
+ * Network 탭에서 평형 선택 시 호출되는 요청 URL을 복사하면 됩니다).
+ * 이 형식이 아니면 null을 반환하고, 그 경우 단지 페이지 전체를 가져와
+ * 텍스트로 추출하는 방식(평형이 하나뿐일 때만 안정적)으로 동작합니다.
+ */
+function extractKbApiParams_(url) {
+  if (!/api\.kbland\.kr\/land-price\/price\/BasePrcInfoNew/i.test(url)) return null;
+  var decoded = url;
+  try { decoded = decodeURIComponent(url); } catch (e) {}
+  var complexMatch = decoded.match(/단지기본일련번호=(\d+)/);
+  var areaMatch = decoded.match(/면적일련번호=(\d+)/);
+  if (!complexMatch || !areaMatch) return null;
+  return { kbComplexNo: complexMatch[1], kbAreaNo: areaMatch[1] };
+}
+
 function gsSetComplexKbLink(complexId, kbUrl) {
   kbUrl = (kbUrl || '').trim();
   if (!kbUrl) throw new Error('링크를 입력해주세요.');
   if (!/^https?:\/\//i.test(kbUrl)) kbUrl = 'https://' + kbUrl;
+
+  var apiParams = extractKbApiParams_(kbUrl);
+  var kbComplexNo = apiParams ? apiParams.kbComplexNo : '';
+  var kbAreaNo = apiParams ? apiParams.kbAreaNo : '';
 
   var sh = getComplexesSheet_();
   var lastRow = sh.getLastRow();
@@ -328,9 +350,9 @@ function gsSetComplexKbLink(complexId, kbUrl) {
     var base = null;
     COMPLEXES.forEach(function (c) { if (c.id === complexId) base = c; });
     if (!base) throw new Error('알 수 없는 단지예요.');
-    sh.appendRow([complexId, base.name, base.areaSqm, kbUrl, '', '', new Date().toISOString()]);
+    sh.appendRow([complexId, base.name, base.areaSqm, kbUrl, kbComplexNo, kbAreaNo, new Date().toISOString()]);
   } else {
-    sh.getRange(rowIdx, 4, 1, 3).setValues([[kbUrl, '', '']]);
+    sh.getRange(rowIdx, 4, 1, 3).setValues([[kbUrl, kbComplexNo, kbAreaNo]]);
   }
   return gsGetComplexes();
 }
