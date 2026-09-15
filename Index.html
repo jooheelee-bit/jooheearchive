@@ -67,14 +67,34 @@
   .wrap{ max-width:720px; margin:0 auto; }
 
   /* header */
-  .header{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+  .header{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:nowrap; margin-bottom:20px; }
+  .header-title{ min-width:0; }
   .header h1{ font-size:26px; font-weight:700; margin:0 0 4px; text-wrap:balance; }
   .header .subtitle{ font-size:14px; color:var(--text-muted); margin:0; }
   .header .subtitle b{ color:var(--text); font-weight:600; }
-  .complex-select{
-    font:inherit; font-size:13px; font-weight:700; padding:8px 14px; border-radius:999px;
-    border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; flex:none;
+
+  .complex-switcher{ position:relative; flex:none; }
+  .complex-switch-btn{
+    font:inherit; font-size:12px; font-weight:700; padding:8px 12px; border-radius:999px;
+    border:1px solid var(--primary); background:var(--surface); color:var(--primary-strong); cursor:pointer;
+    white-space:nowrap; display:inline-flex; align-items:center; gap:4px;
   }
+  .complex-switch-btn .chevron{ font-size:10px; transition:transform .15s; }
+  .complex-switch-btn:hover{ background:var(--primary); color:var(--on-primary); }
+  .complex-switch-btn.open{ background:var(--primary); color:var(--on-primary); }
+  .complex-switch-btn.open .chevron{ transform:rotate(180deg); }
+
+  .complex-menu{
+    position:absolute; top:calc(100% + 8px); right:0; z-index:20; min-width:190px;
+    background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:8px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; gap:6px;
+  }
+  .complex-menu-item{
+    font:inherit; font-size:13px; font-weight:600; text-align:left; padding:9px 14px; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; white-space:nowrap;
+  }
+  .complex-menu-item:hover{ background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .complex-menu-item.active{ background:var(--primary); color:var(--on-primary); border-color:var(--primary); font-weight:700; }
 
   /* stats */
   .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
@@ -242,6 +262,8 @@
   .load-banner{ background:var(--surface-2); color:var(--text-muted); border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
 
   @media (max-width:480px){
+    .header h1{ font-size:21px; }
+    .complex-switch-btn{ font-size:11px; padding:7px 10px; }
     .stats{ grid-template-columns:repeat(2,1fr); }
     .kb-price-grid{ grid-template-columns:1fr; }
     .form-grid{ grid-template-columns:1fr; }
@@ -256,11 +278,16 @@
 <body>
 <div class="wrap">
   <div class="header">
-    <div>
+    <div class="header-title">
       <h1 id="complexTitle">구로두산</h1>
       <p class="subtitle" id="complexSubtitle">매매 · 전용 66㎡(전용44.64) 매물 트래커</p>
     </div>
-    <select id="complexSelect" class="complex-select" aria-label="단지 선택"></select>
+    <div class="complex-switcher">
+      <button type="button" id="complexSwitchBtn" class="complex-switch-btn" aria-haspopup="true" aria-expanded="false">
+        단지 변경 <span class="chevron">▾</span>
+      </button>
+      <div class="complex-menu" id="complexMenu" hidden></div>
+    </div>
   </div>
 
   <div id="loadBanner" class="load-banner">불러오는 중…</div>
@@ -1026,12 +1053,43 @@
     return state.complexes.find(function(c){ return c.id === state.complexId; }) || null;
   }
 
-  function populateComplexSelect(){
-    var sel = document.getElementById('complexSelect');
-    sel.innerHTML = state.complexes.map(function(c){
-      return '<option value="' + escapeHtml(c.id) + '"' + (c.id === state.complexId ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+  function populateComplexMenu(){
+    var menu = document.getElementById('complexMenu');
+    menu.innerHTML = state.complexes.map(function(c){
+      var isActive = c.id === state.complexId;
+      return '<button type="button" class="complex-menu-item' + (isActive ? ' active' : '') + '" data-id="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</button>';
     }).join('');
   }
+
+  function setComplexMenuOpen(open){
+    var btn = document.getElementById('complexSwitchBtn');
+    var menu = document.getElementById('complexMenu');
+    menu.hidden = !open;
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  document.getElementById('complexSwitchBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    var menu = document.getElementById('complexMenu');
+    setComplexMenuOpen(menu.hidden);
+  });
+
+  document.getElementById('complexMenu').addEventListener('click', function(e){
+    var item = e.target.closest('.complex-menu-item');
+    if (!item) return;
+    setComplexMenuOpen(false);
+    switchComplex(item.dataset.id);
+  });
+
+  document.addEventListener('click', function(e){
+    var switcher = document.querySelector('.complex-switcher');
+    if (switcher && !switcher.contains(e.target)) setComplexMenuOpen(false);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') setComplexMenuOpen(false);
+  });
 
   function renderComplexTexts(){
     var complex = currentComplex();
@@ -1060,15 +1118,12 @@
     storeComplexId(newId);
     state.editingId = null; state.editingTags = null; state.distFilter = null;
     state.items = []; state.kbPrice = null;
+    populateComplexMenu();
     renderComplexTexts();
     render();
     renderKbPrice();
     await refreshData();
   }
-
-  document.getElementById('complexSelect').addEventListener('change', function(){
-    switchComplex(this.value);
-  });
 
   async function boot(){
     try {
@@ -1083,7 +1138,7 @@
     var initial = state.complexes.find(function(c){ return c.id === stored; });
     state.complexId = (initial || state.complexes[0]).id;
 
-    populateComplexSelect();
+    populateComplexMenu();
     renderComplexTexts();
     await refreshData();
     setInterval(function(){
