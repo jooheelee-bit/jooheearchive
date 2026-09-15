@@ -242,7 +242,7 @@ function gsAddListingsBulk(complexId, entries) {
       priceRaw: entry.priceRaw, priceMin: entry.priceMin, priceMax: entry.priceMax,
       latestPriceRaw: '', latestPriceMin: null, latestPriceMax: null,
       confirmedDate: entry.confirmedDate || '', brokerCount: entry.brokerCount,
-      tags: entry.tags || [], highlightedTags: [], link: '', memo: '', status: 'new',
+      tags: [], highlightedTags: [], link: '', memo: entry.memo || '', status: 'new',
       createdAt: now, updatedAt: now
     };
     sh.appendRow(objectToRow_(obj));

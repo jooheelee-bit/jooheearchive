@@ -500,13 +500,13 @@
   function keyOf(it){ return [it.dong, it.floorText, it.priceRaw].join('__'); }
 
   var DIRECTION_WORDS = ['남동향','남서향','북동향','북서향','남향','북향','동향','서향'];
-  var TAG_LINE_BLOCKLIST = ['알림관심매물','공유하기'];
+  var NOTE_LINE_BLOCKLIST = ['알림관심매물','공유하기'];
 
-  function isLikelyTagLine(line){
+  function isLikelyNoteLine(line){
     if (!/,/.test(line)) return false;
     if (/\d/.test(line)) return false;
     if (line.length > 60) return false;
-    if (TAG_LINE_BLOCKLIST.indexOf(line) !== -1) return false;
+    if (NOTE_LINE_BLOCKLIST.indexOf(line) !== -1) return false;
     if (/^면적\s*단위/.test(line)) return false;
     if (/^아파트/.test(line)) return false;
     return true;
@@ -526,7 +526,7 @@
         if (m){ dong = m[1]; break; }
       }
 
-      var floorText='', direction='', area='', confirmedDate='', brokerCount=null, tags=[];
+      var floorText='', direction='', area='', confirmedDate='', brokerCount=null, memo='';
       for (var k=i+1; k<Math.min(lines.length,i+20); k++){
         var line = lines[k];
         if (!line) continue;
@@ -554,16 +554,14 @@
         } else if (/중개사/.test(line)){
           var bm = line.match(/(\d+)\s*곳/);
           if (bm) brokerCount = parseInt(bm[1],10);
-        } else if (isLikelyTagLine(line)){
-          line.split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(t){
-            if (DIRECTION_WORDS.indexOf(t) === -1 && tags.indexOf(t) === -1) tags.push(t);
-          });
+        } else if (!memo && isLikelyNoteLine(line)){
+          memo = line.replace(/,+$/, '').trim();
         }
       }
       if (areaMatch && area && area.indexOf(areaMatch) === -1) continue;
       entries.push({
         dong: dong || '동 미상', priceRaw: priceRaw, floorText: floorText,
-        direction: direction, confirmedDate: confirmedDate, brokerCount: brokerCount, tags: tags, link: ''
+        direction: direction, confirmedDate: confirmedDate, brokerCount: brokerCount, memo: memo, link: ''
       });
     }
     return entries;
@@ -604,7 +602,7 @@
         dong: entry.dong, priceRaw: entry.priceRaw, priceMin: priced.min, priceMax: priced.max,
         floorText: entry.floorText || '', direction: entry.direction || '',
         confirmedDate: entry.confirmedDate || '', brokerCount: (entry.brokerCount != null ? entry.brokerCount : null),
-        tags: entry.tags || []
+        memo: entry.memo || ''
       };
     });
     var res = await gsCall('gsAddListingsBulk', state.complexId, payload);
