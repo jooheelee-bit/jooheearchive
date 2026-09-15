@@ -365,17 +365,42 @@ function gsFetchListingFromLink(rawUrl) {
 
 /* ---------- KB시세 ---------- */
 
-function extractLabelValue_(html, label) {
-  var idx = html.indexOf('>' + label + '<');
-  if (idx === -1) return null;
-  var after = html.slice(idx, idx + 1200);
-  var spans = after.match(/<span[^>]*>([^<]+)<\/span>/g);
-  if (!spans || spans.length < 2) return null;
-  function textOf(tag) {
-    var m = tag.match(/>([^<]+)</);
-    return m ? m[1] : '';
+/**
+ * 라벨(예: 'KB시세 일반가') 바로 뒤에 오는 두 개의 span 값을 읽어옵니다.
+ * 한 페이지에 여러 평형의 시세가 나오는 단지가 있어서, areaHint(예: '56.66')를
+ * 넘기면 그 문자열이 앞쪽 근처(최대 3000자 이내)에 등장하는 라벨을 우선적으로
+ * 선택합니다. 못 찾으면 페이지에서 가장 먼저 나오는 라벨 값으로 대체합니다.
+ */
+function extractLabelValue_(html, label, areaHint) {
+  function parseAt(idx) {
+    var after = html.slice(idx, idx + 1200);
+    var spans = after.match(/<span[^>]*>([^<]+)<\/span>/g);
+    if (!spans || spans.length < 2) return null;
+    function textOf(tag) {
+      var m = tag.match(/>([^<]+)</);
+      return m ? m[1] : '';
+    }
+    return { first: textOf(spans[0]), second: textOf(spans[1]) };
   }
-  return { first: textOf(spans[0]), second: textOf(spans[1]) };
+
+  var searchFrom = 0;
+  var firstMatch = null;
+  while (true) {
+    var idx = html.indexOf('>' + label + '<', searchFrom);
+    if (idx === -1) break;
+    var parsed = parseAt(idx);
+    if (parsed) {
+      if (!firstMatch) firstMatch = parsed;
+      if (areaHint) {
+        var windowStart = Math.max(0, idx - 3000);
+        if (html.slice(windowStart, idx).indexOf(areaHint) !== -1) {
+          return parsed;
+        }
+      }
+    }
+    searchFrom = idx + label.length + 2;
+  }
+  return firstMatch;
 }
 
 function normalizeKbDate_(s) {
@@ -396,8 +421,8 @@ function gsRefreshKbPrice(complexId) {
   }
   var html = res.getContentText();
 
-  var general = extractLabelValue_(html, 'KB시세 일반가');
-  var deal = extractLabelValue_(html, '최근 실거래가');
+  var general = extractLabelValue_(html, 'KB시세 일반가', complex.areaMatch);
+  var deal = extractLabelValue_(html, '최근 실거래가', complex.areaMatch);
   if (!general || !deal) {
     throw new Error('시세 페이지 구조를 인식하지 못했어요. kbland.kr 화면 구성이 바뀌었을 수 있어요.');
   }
