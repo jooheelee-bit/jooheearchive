@@ -30,9 +30,17 @@ var COLUMNS = [
  * 단지를 추가하려면 이 배열에 항목을 추가하세요. 첫 번째 항목(gurodusan)은
  * 기존에 쓰던 시트 이름(Listings/Meta)을 그대로 사용하는 기본 단지입니다.
  */
+/**
+ * kbComplexNo(단지기본일련번호)/kbAreaNo(면적일련번호)가 있으면 kbland.kr의
+ * 실제 시세 API(BasePrcInfoNew)를 직접 호출해 정확한 평형의 시세를 가져옵니다.
+ * 브라우저 개발자도구 Network 탭에서 평형을 선택했을 때 호출되는
+ * https://api.kbland.kr/land-price/price/BasePrcInfoNew?단지기본일련번호=...&면적일련번호=... 요청을 보면 값을 확인할 수 있습니다.
+ * 이 값이 없는 단지는 기존처럼 kbUrl 페이지를 통째로 가져와 텍스트에서 추출합니다
+ * (단지에 평형이 하나뿐일 때만 안정적으로 동작해요).
+ */
 var COMPLEXES = [
   { id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(전용44.64)', areaMatch: '66', exampleArea: '66㎡ (전용44.64)', kbUrl: 'https://kbland.kr/se/c/766' },
-  { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaLabel: '매매 · 전용 56.66㎡(전용40.95)', areaMatch: '56.66', exampleArea: '56.66㎡ (전용40.95)', kbUrl: 'https://kbland.kr/se/c/42671' },
+  { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaLabel: '매매 · 전용 56.66㎡(전용40.95)', areaMatch: '56.66', exampleArea: '56.66㎡ (전용40.95)', kbUrl: 'https://kbland.kr/se/c/42671', kbComplexNo: 42671, kbAreaNo: 41439 },
   { id: 'byeoksanlivepark', name: '벽산라이브파크', areaLabel: '매매 · 전용 102.49㎡(전용84.89)', areaMatch: '102.49', exampleArea: '102.49㎡ (전용84.89)', kbUrl: 'https://kbland.kr/se/c/422' }
 ];
 var DEFAULT_COMPLEX_ID = COMPLEXES[0].id;
@@ -413,8 +421,70 @@ function normalizeKbDate_(s) {
   return y + '.' + m + '.' + d;
 }
 
-function gsRefreshKbPrice(complexId) {
-  var complex = complexById_(complexId);
+function withThousandsCommas_(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function formatManwonPrice_(v) {
+  if (v === null || v === undefined || v === '' || isNaN(v)) return '';
+  v = Math.round(Number(v));
+  var eok = Math.floor(v / 10000);
+  var man = v % 10000;
+  if (eok === 0) return withThousandsCommas_(man) + '만';
+  if (man === 0) return eok + '억';
+  return eok + '억 ' + withThousandsCommas_(man);
+}
+
+function formatYyyymmdd_(s) {
+  if (!s) return '';
+  s = String(s);
+  if (s.length !== 8) return s;
+  return s.slice(0, 4) + '.' + s.slice(4, 6) + '.' + s.slice(6, 8);
+}
+
+/**
+ * kbland.kr의 실제 시세 API(BasePrcInfoNew)를 단지기본일련번호+면적일련번호로
+ * 직접 호출해 정확한 평형의 매매 시세를 가져옵니다. HTML을 통째로 가져와
+ * 텍스트로 추출하는 방식과 달리, 페이지에 여러 평형이 섞여 있어도 정확합니다.
+ */
+function refreshKbPriceFromApi_(complex) {
+  var url = 'https://api.kbland.kr/land-price/price/BasePrcInfoNew'
+    + '?' + encodeURIComponent('단지기본일련번호') + '=' + complex.kbComplexNo
+    + '&' + encodeURIComponent('면적일련번호') + '=' + complex.kbAreaNo;
+  var res = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+    }
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('KB시세 API 응답 오류 (코드 ' + res.getResponseCode() + ')');
+  }
+  var json = JSON.parse(res.getContentText());
+  var body = json && json.dataBody && json.dataBody.data;
+  var sise = body && body['시세'] && body['시세'][0];
+  if (!sise) {
+    throw new Error('KB시세 API 응답에서 시세 정보를 찾지 못했어요.');
+  }
+
+  var kb = {
+    generalPrice: formatManwonPrice_(sise['매매일반거래가']),
+    generalDate: formatYyyymmdd_(sise['시세기준년월일']),
+    dealPrice: formatManwonPrice_(sise['매매거래금액']),
+    dealDate: formatYyyymmdd_(sise['매매계약종료년월일']),
+    dealFloor: sise['매매해당층수'] ? (sise['매매해당층수'] + '층') : '',
+    fetchedAt: new Date().toISOString()
+  };
+  writeKbPrice_(complex.id, kb);
+  return kb;
+}
+
+/**
+ * 단지 상세 페이지를 통째로 가져와 텍스트에서 KB시세를 추출합니다.
+ * 단지에 평형이 하나뿐인 경우에만 안정적으로 동작합니다(여러 평형이 섞여
+ * 있으면 어느 평형 값을 가져올지 페이지 기본값에 의존하게 됩니다).
+ */
+function refreshKbPriceFromHtml_(complex) {
   var res = UrlFetchApp.fetch(complex.kbUrl, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) {
     throw new Error('kbland.kr 응답 오류 (코드 ' + res.getResponseCode() + ')');
@@ -438,6 +508,14 @@ function gsRefreshKbPrice(complexId) {
   };
   writeKbPrice_(complex.id, kb);
   return kb;
+}
+
+function gsRefreshKbPrice(complexId) {
+  var complex = complexById_(complexId);
+  if (complex.kbComplexNo && complex.kbAreaNo) {
+    return refreshKbPriceFromApi_(complex);
+  }
+  return refreshKbPriceFromHtml_(complex);
 }
 
 /* ---------- 일회성 유틸리티 (Apps Script 편집기에서 직접 실행) ---------- */
