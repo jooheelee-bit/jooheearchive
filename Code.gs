@@ -26,24 +26,28 @@ var COLUMNS = [
 ];
 
 /**
- * 페이지 우측 상단의 단지 선택 버튼에 표시되는 단지 목록입니다.
- * 단지를 추가하려면 이 배열에 항목을 추가하세요. 첫 번째 항목(gurodusan)은
- * 기존에 쓰던 시트 이름(Listings/Meta)을 그대로 사용하는 기본 단지입니다.
- */
-/**
+ * 기본으로 내장된 단지 목록입니다. 첫 번째 항목(gurodusan)은 기존에 쓰던
+ * 시트 이름(Listings/Meta)을 그대로 사용하는 기본 단지입니다.
+ * areaSqm(㎡)만 넣으면 평수 표기·붙여넣기 평형 매칭 문구는 자동으로 계산됩니다.
+ *
+ * 사용자가 앱의 "단지 추가" 버튼으로 추가한 단지는 Complexes 시트에 저장되고,
+ * "KB시세 연결" 버튼으로 지정/변경한 kbUrl도 Complexes 시트에 저장되어
+ * 여기 있는 기본값을 덮어씁니다(resolvedComplexList_ 참고).
+ *
  * kbComplexNo(단지기본일련번호)/kbAreaNo(면적일련번호)가 있으면 kbland.kr의
  * 실제 시세 API(BasePrcInfoNew)를 직접 호출해 정확한 평형의 시세를 가져옵니다.
  * 브라우저 개발자도구 Network 탭에서 평형을 선택했을 때 호출되는
  * https://api.kbland.kr/land-price/price/BasePrcInfoNew?단지기본일련번호=...&면적일련번호=... 요청을 보면 값을 확인할 수 있습니다.
- * 이 값이 없는 단지는 기존처럼 kbUrl 페이지를 통째로 가져와 텍스트에서 추출합니다
+ * 이 값이 없는 단지는 kbUrl 페이지를 통째로 가져와 텍스트에서 추출합니다
  * (단지에 평형이 하나뿐일 때만 안정적으로 동작해요).
  */
 var COMPLEXES = [
-  { id: 'gurodusan', name: '구로두산', areaLabel: '매매 · 전용 66㎡(전용44.64)', areaMatch: '66', exampleArea: '66㎡ (전용44.64)', kbUrl: 'https://kbland.kr/se/c/766' },
-  { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaLabel: '매매 · 전용 56.66㎡(전용40.95)', areaMatch: '56.66', exampleArea: '56.66㎡ (전용40.95)', kbUrl: 'https://kbland.kr/se/c/42671', kbComplexNo: 42671, kbAreaNo: 41439 },
-  { id: 'byeoksanlivepark', name: '벽산라이브파크', areaLabel: '매매 · 전용 102.49㎡(전용84.89)', areaMatch: '102.49', exampleArea: '102.49㎡ (전용84.89)', kbUrl: 'https://kbland.kr/se/c/422' }
+  { id: 'gurodusan', name: '구로두산', areaSqm: 66, kbUrl: 'https://kbland.kr/se/c/766' },
+  { id: 'hanyangmarkview', name: '한양수자인성남마크뷰', areaSqm: 56.66, kbUrl: 'https://kbland.kr/se/c/42671', kbComplexNo: 42671, kbAreaNo: 41439 },
+  { id: 'byeoksanlivepark', name: '벽산라이브파크', areaSqm: 74, kbUrl: '' }
 ];
 var DEFAULT_COMPLEX_ID = COMPLEXES[0].id;
+var COMPLEXES_SHEET_NAME = 'Complexes';
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -53,10 +57,91 @@ function doGet() {
 
 /* ---------- 단지 helpers ---------- */
 
+function getComplexesSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(COMPLEXES_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(COMPLEXES_SHEET_NAME);
+    sh.appendRow(['id', 'name', 'areaSqm', 'kbUrl', 'kbComplexNo', 'kbAreaNo', 'createdAt']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function readComplexRows_() {
+  var sh = getComplexesSheet_();
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sh.getRange(2, 1, lastRow - 1, 7).getValues();
+  return values.filter(function (r) { return r[0]; }).map(function (r) {
+    return {
+      id: r[0], name: r[1], areaSqm: r[2],
+      kbUrl: r[3] || '', kbComplexNo: r[4] || '', kbAreaNo: r[5] || '', createdAt: r[6] || ''
+    };
+  });
+}
+
+/**
+ * 내장 단지(COMPLEXES)와 Complexes 시트에 저장된 값을 합칩니다.
+ * 시트에 같은 id가 있으면 kbUrl/kbComplexNo/kbAreaNo를 그 값으로 덮어쓰고
+ * (KB시세 연결/변경), 시트에만 있는 id는 사용자가 새로 추가한 단지로 취급합니다.
+ */
+function resolvedComplexList_() {
+  var rows = readComplexRows_();
+  var overrides = {};
+  rows.forEach(function (r) { overrides[r.id] = r; });
+
+  var result = [];
+  var seen = {};
+  COMPLEXES.forEach(function (base) {
+    var o = overrides[base.id];
+    result.push({
+      id: base.id,
+      name: (o && o.name) || base.name,
+      areaSqm: (o && o.areaSqm) || base.areaSqm,
+      kbUrl: o ? o.kbUrl : (base.kbUrl || ''),
+      kbComplexNo: o ? o.kbComplexNo : (base.kbComplexNo || ''),
+      kbAreaNo: o ? o.kbAreaNo : (base.kbAreaNo || '')
+    });
+    seen[base.id] = true;
+  });
+  rows.forEach(function (r) {
+    if (seen[r.id]) return;
+    result.push(r);
+  });
+  return result;
+}
+
 function complexById_(complexId) {
+  var list = resolvedComplexList_();
   var found = null;
-  COMPLEXES.forEach(function (c) { if (c.id === complexId) found = c; });
-  return found || COMPLEXES[0];
+  list.forEach(function (c) { if (c.id === complexId) found = c; });
+  return found || list[0];
+}
+
+function pyeongOf_(areaSqm) {
+  return Math.round(Number(areaSqm) / 3.305785);
+}
+
+function areaLabelOf_(areaSqm) {
+  return '매매 · 전용 ' + areaSqm + '㎡(~' + pyeongOf_(areaSqm) + '평)';
+}
+
+function complexViewOf_(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    areaSqm: c.areaSqm,
+    areaLabel: areaLabelOf_(c.areaSqm),
+    areaMatch: String(c.areaSqm),
+    exampleArea: c.areaSqm + '㎡',
+    hasKbLink: !!c.kbUrl
+  };
+}
+
+function slugifyComplexId_(name) {
+  var s = String(name).toLowerCase().replace(/[^a-z0-9가-힣]+/g, '-').replace(/^-+|-+$/g, '');
+  return (s || 'complex').slice(0, 40);
 }
 
 function listingsSheetName_(complexId) {
@@ -192,9 +277,62 @@ function writeKbPrice_(complexId, kb) {
 /* ---------- client-callable functions ---------- */
 
 function gsGetComplexes() {
-  return COMPLEXES.map(function (c) {
-    return { id: c.id, name: c.name, areaLabel: c.areaLabel, areaMatch: c.areaMatch, exampleArea: c.exampleArea };
-  });
+  return resolvedComplexList_().map(complexViewOf_);
+}
+
+/**
+ * 사용자가 "단지 추가" 버튼으로 새 단지를 등록합니다. KB시세 링크는 비워둔
+ * 채로 생성되며, 나중에 gsSetComplexKbLink로 연결/변경할 수 있습니다.
+ */
+function gsAddComplex(name, areaSqm) {
+  name = (name || '').trim();
+  areaSqm = Number(areaSqm);
+  if (!name) throw new Error('단지 이름을 입력해주세요.');
+  if (!areaSqm || isNaN(areaSqm) || areaSqm <= 0) throw new Error('평수(㎡)를 올바르게 입력해주세요.');
+
+  var existingIds = {};
+  resolvedComplexList_().forEach(function (c) { existingIds[c.id] = true; });
+
+  var baseId = slugifyComplexId_(name);
+  var uniqueId = baseId;
+  var suffix = 2;
+  while (existingIds[uniqueId]) { uniqueId = baseId + '-' + suffix; suffix++; }
+
+  var sh = getComplexesSheet_();
+  sh.appendRow([uniqueId, name, areaSqm, '', '', '', new Date().toISOString()]);
+  return { complexes: gsGetComplexes(), newId: uniqueId };
+}
+
+/**
+ * 단지의 KB부동산 시세 페이지 링크를 연결하거나 바꿉니다. 내장 단지(COMPLEXES)의
+ * 값을 Complexes 시트에 override로 저장하는 방식이라, 기본 단지든 사용자가
+ * 추가한 단지든 동일하게 동작합니다. API 방식(kbComplexNo/kbAreaNo)이 아니라
+ * 페이지 전체를 가져와 추출하는 방식으로 전환됩니다.
+ */
+function gsSetComplexKbLink(complexId, kbUrl) {
+  kbUrl = (kbUrl || '').trim();
+  if (!kbUrl) throw new Error('링크를 입력해주세요.');
+  if (!/^https?:\/\//i.test(kbUrl)) kbUrl = 'https://' + kbUrl;
+
+  var sh = getComplexesSheet_();
+  var lastRow = sh.getLastRow();
+  var rowIdx = -1;
+  if (lastRow >= 2) {
+    var ids = sh.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i][0] === complexId) { rowIdx = i + 2; break; }
+    }
+  }
+
+  if (rowIdx === -1) {
+    var base = null;
+    COMPLEXES.forEach(function (c) { if (c.id === complexId) base = c; });
+    if (!base) throw new Error('알 수 없는 단지예요.');
+    sh.appendRow([complexId, base.name, base.areaSqm, kbUrl, '', '', new Date().toISOString()]);
+  } else {
+    sh.getRange(rowIdx, 4, 1, 3).setValues([[kbUrl, '', '']]);
+  }
+  return gsGetComplexes();
 }
 
 function gsGetData(complexId) {
@@ -407,9 +545,10 @@ function refreshKbPriceFromHtml_(complex) {
     throw new Error('kbland.kr 응답 오류 (코드 ' + res.getResponseCode() + ')');
   }
   var html = res.getContentText();
+  var areaMatch = String(complex.areaSqm);
 
-  var general = extractLabelValue_(html, 'KB시세 일반가', complex.areaMatch);
-  var deal = extractLabelValue_(html, '최근 실거래가', complex.areaMatch);
+  var general = extractLabelValue_(html, 'KB시세 일반가', areaMatch);
+  var deal = extractLabelValue_(html, '최근 실거래가', areaMatch);
   if (!general || !deal) {
     throw new Error('시세 페이지 구조를 인식하지 못했어요. kbland.kr 화면 구성이 바뀌었을 수 있어요.');
   }
@@ -429,6 +568,9 @@ function refreshKbPriceFromHtml_(complex) {
 
 function gsRefreshKbPrice(complexId) {
   var complex = complexById_(complexId);
+  if (!complex.kbUrl) {
+    throw new Error('이 단지는 KB시세 링크가 연결되어 있지 않아요. 먼저 링크를 연결해주세요.');
+  }
   if (complex.kbComplexNo && complex.kbAreaNo) {
     return refreshKbPriceFromApi_(complex);
   }
@@ -501,7 +643,8 @@ function debugKbPriceBlocks() {
  * 한 단지에서 오류가 나도 나머지 단지는 계속 새로고침을 시도합니다.
  */
 function refreshAllKbPrices() {
-  COMPLEXES.forEach(function (c) {
+  resolvedComplexList_().forEach(function (c) {
+    if (!c.kbUrl) return;
     try {
       gsRefreshKbPrice(c.id);
     } catch (e) {
