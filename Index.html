@@ -19,7 +19,6 @@
     --status-interested:#DB2777; --status-interested-bg:#FCE7F3;
     --status-unavailable:#5B6472; --status-unavailable-bg:#ECEEF0;
     --price-up:#E03131; --price-down:#1971C2;
-    --link-color:#2563EB; --link-bg:#E9EFFD;
     --tag-active:var(--chip); --tag-active-text:var(--chip-text);
     --shadow:0 1px 2px rgba(23,40,32,0.06), 0 4px 14px rgba(23,40,32,0.06);
     --radius:14px;
@@ -36,7 +35,6 @@
       --status-interested:#F472B6; --status-interested-bg:#4A1942;
       --status-unavailable:#9AA3AD; --status-unavailable-bg:#262B30;
       --price-up:#FF6B6B; --price-down:#74C0FC;
-      --link-color:#60A5FA; --link-bg:#16233B;
       --tag-active:var(--chip); --tag-active-text:var(--chip-text);
       --shadow:0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.35);
     }
@@ -52,7 +50,6 @@
     --status-interested:#F472B6; --status-interested-bg:#4A1942;
     --status-unavailable:#9AA3AD; --status-unavailable-bg:#262B30;
     --price-up:#FF6B6B; --price-down:#74C0FC;
-    --link-color:#60A5FA; --link-bg:#16233B;
     --tag-active:var(--chip); --tag-active-text:var(--chip-text);
     --shadow:0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.35);
   }
@@ -181,10 +178,10 @@
   .card .row1{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px; }
   .card .dong{ font-family:'IBM Plex Sans KR',sans-serif; font-weight:700; font-size:15px; margin-right:2px; }
   .link-chip{
-    font-size:11px; font-weight:600; color:var(--link-color); background:var(--link-bg); border:1px solid var(--link-bg);
+    font-size:11px; font-weight:600; color:var(--text-muted); background:var(--surface-2); border:1px solid var(--border);
     padding:2px 8px; border-radius:999px; text-decoration:none; flex:none; white-space:nowrap;
   }
-  .link-chip:hover{ background:var(--link-color); color:var(--on-primary); border-color:var(--link-color); }
+  .link-chip:hover{ color:var(--text); border-color:var(--text-muted); }
   .tag-pill{
     font:inherit; font-size:11px; font-weight:600; color:var(--text-muted); background:var(--surface-2); border:none;
     padding:2px 8px; border-radius:999px; white-space:nowrap; cursor:pointer;
