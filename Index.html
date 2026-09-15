@@ -555,7 +555,7 @@
           var bm = line.match(/(\d+)\s*곳/);
           if (bm) brokerCount = parseInt(bm[1],10);
         } else if (!memo && isLikelyNoteLine(line)){
-          memo = line.replace(/,+$/, '').trim();
+          memo = line;
         }
       }
       if (areaMatch && area && area.indexOf(areaMatch) === -1) continue;
